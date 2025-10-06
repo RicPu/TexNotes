@@ -1,0 +1,51 @@
+\makeatletter
+\let\c@figure\c@table
+\let\c@equation\c@table
+\makeatother
+
+\usepackage{graphicx}
+\graphicspath{
+  {./figures/}
+}
+
+\usepackage{adjustbox}
+\usepackage{array}
+\usepackage{booktabs}
+
+\renewcommand*{\arraystretch}{1.1}
+
+\usepackage{tabularray}
+\usepackage{codehigh}
+\UseTblrLibrary{amsmath, booktabs, siunitx}
+
+\usepackage{floatrow}
+\floatsetup{
+  footnoterule=none,
+  footposition=bottom
+}
+
+\floatsetup[figure]{
+  capbesideposition=right,
+  capbesidesep=quad
+}
+
+\usepackage{caption}
+\usepackage{subcaption}
+
+\DeclareCaptionLabelSeparator{slash}{\hspace{0.25em}/\hspace{0.25em}}
+\captionsetup{
+  format=plain,
+  indention=0.6em,
+  font=small,
+  labelfont={sf, bf},
+  labelsep=slash,
+  labelformat=simple,
+  tableposition=bottom,
+  parskip=.3\baselineskip plus 1pt
+}
+
+\makeatletter
+\newlength{\floatfootruleindent}
+\setlength{\floatfootruleindent}{\caption@indent}
+\renewcommand*{\floatfootskip}{2pt\color{gray!50}\hspace{\floatfootruleindent}\hrulefill}
+\makeatother
