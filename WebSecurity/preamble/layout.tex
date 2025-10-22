@@ -1,0 +1,123 @@
+\usepackage[rgb, table]{xcolor}
+
+\definecolor{ChapterNumberColor}{gray}{0.88}
+\definecolor{HeaderColor}{gray}{0.35}
+\definecolor{HeaderRuleColor}{gray}{0.75}
+\definecolor{UrlColor}{RGB}{255,127,100}
+\definecolor{CiteColor}{RGB}{127,230,252}
+
+\definecolor{codebg}    {RGB}{245, 245, 248}
+\definecolor{codeframe} {RGB}{220,220,224}
+\definecolor{keyword}   {RGB}{0, 0, 180}
+\definecolor{comment}   {RGB}{139, 139, 139}
+\definecolor{string}    {RGB}{0, 150, 0}
+
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{breakable, listings}
+\usepackage{geometry}
+\geometry{
+  margin=1in,
+  includehead,
+  headheight=2.5em,
+  headsep=0mm
+}
+
+\flushbottom
+
+
+%%% =====[ HEADER ]=====
+
+\usepackage{fancyhdr}
+
+\makeatletter
+\def\f@nch@fancyhf@Echeck#1{}
+\makeatother
+
+\newlength{\headerpadding}
+\setlength{\headerpadding}{2pt}
+
+\usepackage{tikz}
+\usetikzlibrary{calc, fadings, arrows.meta, arrows, shadows, backgrounds}
+
+\definecolor{HeaderRuleColor}{gray}{0.75}
+\renewcommand*{\headrulewidth}{0.9pt}
+\tikzset{
+  header rule/.style={HeaderRuleColor},
+  header decor/.style={HeaderRuleColor, line width=1.0pt, -{Diamond[open]}, overlay}
+}
+
+\newsavebox{\defaultheaderrule}
+\newsavebox{\sectionheaderrule}
+\sbox{\defaultheaderrule}{
+  \tikz[baseline=-1em]{
+	\fill[header rule] (0, 0) rectangle (\textwidth, \headrulewidth);
+	\draw[header decor] (\textwidth, \headrulewidth/2) -- ++(7pt, 0);  
+  }
+}
+
+\sbox{\sectionheaderrule}{
+  \tikz[baseline=-1em]{
+	\fill[header rule, path fading=west] (0, 0) rectangle (0.45\textwidth, \headrulewidth);
+	\draw[header decor] (0.45\textwidth, \headrulewidth/2) -- ++(7pt, 0);  
+  }
+}
+
+\fancypagestyle{header}{
+  \renewcommand*{\headrule}{\usebox{\defaultheaderrule}\linebreak[1]}
+  \fancyhead[LO]{\color{HeaderColor}\textsf{\nouppercase{\rightmark}}\hspace{\headerpadding}}
+  \fancyhead[RE]{\textbf{\thepage}\hspace{\headerpadding}}
+  \fancyhead[RO]{\textbf{\thepage}\hspace{\headerpadding}}
+  \fancyhead[LE]{\hspace{\headerpadding}\textbf{\thepage}}
+  \fancyfoot{}
+}
+
+\fancypagestyle{plain}[header]{
+  \renewcommand*{\headrule}{\hfill\usebox{\sectionheaderrule}\linebreak[1]}
+  \fancyhead[LO, RE]{}
+}
+
+\pagestyle{header}
+
+
+%%% =====[ TITLES ]=====
+
+\usepackage[newparttoc, clearempty]{titlesec}
+
+\NewDocumentCommand{\sectionnotnumbered}{m}{
+  \section*{#1}
+  \markboth{#1}{#1}
+  \addcontentsline{toc}{section}{#1}
+}
+
+\NewDocumentCommand{\sectionheadingletter}{m}{%
+  \makebox[0pt][l]{%
+    \raisebox{-16pt}[0pt][0pt]{%
+      \hspace{0.55em}\color{gray!40}%
+      \usefont{T1}{qzc}{m}{it}\fontsize{95pt}{95pt}\selectfont
+      #1%
+    }%
+  }%
+}
+
+\NewDocumentCommand{\customsectionformat}{m}{%
+  \vspace*{-25pt}
+  \setlength{\parindent}{0pt}\raggedright
+  \Huge\bfseries
+  \sectionheadingletter{\ExtractLeadingChars{#1}}%
+  #1\par\nobreak
+  \vspace{20pt}%
+}
+
+\titleformat{\section}{\normalfont}{}{0pt}{\thispagestyle{plain}\customsectionformat}
+\titleformat{\subsection}{\MakeLinkTarget[subsection]{}\large\sffamily\bfseries}{\thesubsection}{0.8em}{}
+\titleformat{\subsubsection}{\MakeLinkTarget[subsubsection]{}\normalfont\sffamily\bfseries}{}{0pt}{}
+\titleformat{\paragraph}[runin]{\MakeLinkTarget[paragraph]{}\normalfont\sffamily\bfseries}{}{0pt}{}
+
+
+\ExplSyntaxOn
+\cs_generate_variant:Nn \tl_item:nn { f }
+\NewDocumentCommand{\ExtractLeadingChars}{O{1} m}{
+    \tl_item:fn { #2 } { #1 }
+}
+\ExplSyntaxOff
