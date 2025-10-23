@@ -15,31 +15,29 @@
   pdfdisplaydoctitle
 }
 
-
 \tcbset{
   myttbox/.style={
-    nobeforeafter, box align=base, boxsep=0em, before upper={\vphantom{]}},
-    left=0.15em, right=0.15em, top=0.25ex, bottom=0.05ex,
-	colback=codebg, colframe=codeframe,
-	arc=0.1em, rounded corners=all, boxrule=0.3mm,
-	grow sidewards by=0.05em, enlarge bottom by=-0.05ex, enlarge top by=-0.4ex,
-	breakable,
-	enhanced
-  }
+      nobeforeafter, box align=base, boxsep=0em, before upper={\vphantom{]}},
+      left=0.15em, right=0.15em, top=0.25ex, bottom=0.05ex,
+      colback=codebg, colframe=codeframe,
+      arc=0.1em, rounded corners=all, boxrule=0.3mm,
+      grow sidewards by=0.05em, enlarge bottom by=-0.05ex, enlarge top by=-0.4ex,
+      breakable,
+      enhanced
+    }
 }
 
 \NewDocumentCommand{\NewTexttt}{m}{
   \tcbox[myttbox]{\texttt{#1}}
 }
 
-
 \tcbset{
   link/.style={
-	nobeforeafter, box align=base, boxsep=0em, before upper={\vphantom{]}},
-	left=0.15em, right=0.15em, top=0.25ex, bottom=0.05ex,
-	arc=0.1em, rounded corners=all, boxrule=0.3mm,
-	grow sidewards by=0.05em, enlarge bottom by=-0.05ex, enlarge top by=-0.4ex
-  }
+      nobeforeafter, box align=base, boxsep=0em, before upper={\vphantom{]}},
+      left=0.15em, right=0.15em, top=0.25ex, bottom=0.05ex,
+      arc=0.1em, rounded corners=all, boxrule=0.3mm,
+      grow sidewards by=0.05em, enlarge bottom by=-0.05ex, enlarge top by=-0.4ex
+    }
 }
 
 \tcbset{
@@ -62,11 +60,11 @@
 
 \DeclareDocumentCommand{\Cref}{s m}{%
   \hyperref[#2]{%
-	\refbox[right={\IfBooleanTF{#1}{0.15em}{0.1em}}]{%
-	  \ztitleref{#2}%
-	  \IfBooleanF{#1}{%
-		\textsuperscript{\ttfamily\tiny\(\,\to\,\)p.\zpageref{#2}}%	  
-	  }%
-	}%
+    \refbox[right={\IfBooleanTF{#1}{0.15em}{0.1em}}]{%
+      \ztitleref{#2}%
+      \IfBooleanF{#1}{%
+        \textsuperscript{\ttfamily\tiny\(\,\to\,\)p.\zpageref{#2}}%	  
+      }%
+    }%
   }%
 }

@@ -1,6 +1,6 @@
 \usepackage{listings}
 
-\lstdefinestyle{CustomPython}{
+\lstdefinestyle{pythonstyle}{
   backgroundcolor=\color{codebg},
   basicstyle=\ttfamily\footnotesize\color{black},
   keywordstyle=\color{keyword}\bfseries,
@@ -36,7 +36,7 @@
 
 \newtcblisting{pythoncode}{
   listing only,
-  listing options={style=CustomPython},
+  listing options={style=pythonstyle},
   colback=codebg,
   colframe=codeframe,
   coltitle=black,
@@ -70,4 +70,18 @@
   #1
 }
 
-\lstset{style=CustomPython}
+\newtcolorbox{customcode}[1]{
+  colback=codebg,
+  colframe=codeframe,
+  coltitle=black,
+  fonttitle=\footnotesize\ttfamily,
+  fontupper=\ttfamily\footnotesize,
+  arc=4pt,
+  boxrule=0.5pt,
+  left=6pt,
+  right=6pt,
+  top=0pt,
+  bottom=6pt,
+  title={#1},
+  enhanced
+}

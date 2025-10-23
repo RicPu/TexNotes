@@ -1,4 +1,4 @@
-\usepackage[rgb, table]{xcolor}
+\usepackage[rgb, table, dvipsnames]{xcolor}
 
 \definecolor{ChapterNumberColor}{gray}{0.88}
 \definecolor{HeaderColor}{gray}{0.35}
@@ -12,7 +12,6 @@
 \definecolor{comment}   {RGB}{139, 139, 139}
 \definecolor{string}    {RGB}{0, 150, 0}
 
-
 \usepackage[most]{tcolorbox}
 \tcbuselibrary{breakable, listings}
 \usepackage{geometry}
@@ -24,7 +23,6 @@
 }
 
 \flushbottom
-
 
 %%% =====[ HEADER ]=====
 
@@ -43,23 +41,23 @@
 \definecolor{HeaderRuleColor}{gray}{0.75}
 \renewcommand*{\headrulewidth}{0.9pt}
 \tikzset{
-  header rule/.style={HeaderRuleColor},
-  header decor/.style={HeaderRuleColor, line width=1.0pt, -{Diamond[open]}, overlay}
+header rule/.style={HeaderRuleColor},
+header decor/.style={HeaderRuleColor, line width=1.0pt, -{Diamond[open]}, overlay}
 }
 
 \newsavebox{\defaultheaderrule}
 \newsavebox{\sectionheaderrule}
 \sbox{\defaultheaderrule}{
   \tikz[baseline=-1em]{
-	\fill[header rule] (0, 0) rectangle (\textwidth, \headrulewidth);
-	\draw[header decor] (\textwidth, \headrulewidth/2) -- ++(7pt, 0);  
+    \fill[header rule] (0, 0) rectangle (\textwidth, \headrulewidth);
+    \draw[header decor] (\textwidth, \headrulewidth/2) -- ++(7pt, 0);
   }
 }
 
 \sbox{\sectionheaderrule}{
   \tikz[baseline=-1em]{
-	\fill[header rule, path fading=west] (0, 0) rectangle (0.45\textwidth, \headrulewidth);
-	\draw[header decor] (0.45\textwidth, \headrulewidth/2) -- ++(7pt, 0);  
+    \fill[header rule, path fading=west] (0, 0) rectangle (0.45\textwidth, \headrulewidth);
+    \draw[header decor] (0.45\textwidth, \headrulewidth/2) -- ++(7pt, 0);
   }
 }
 
@@ -78,7 +76,6 @@
 }
 
 \pagestyle{header}
-
 
 %%% =====[ TITLES ]=====
 
@@ -114,10 +111,9 @@
 \titleformat{\subsubsection}{\MakeLinkTarget[subsubsection]{}\normalfont\sffamily\bfseries}{}{0pt}{}
 \titleformat{\paragraph}[runin]{\MakeLinkTarget[paragraph]{}\normalfont\sffamily\bfseries}{}{0pt}{}
 
-
 \ExplSyntaxOn
 \cs_generate_variant:Nn \tl_item:nn { f }
 \NewDocumentCommand{\ExtractLeadingChars}{O{1} m}{
-    \tl_item:fn { #2 } { #1 }
+  \tl_item:fn { #2 } { #1 }
 }
 \ExplSyntaxOff
