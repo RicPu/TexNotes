@@ -119,3 +119,63 @@ The behavior and score of a cookie are controlled by parameters set within the i
 \end{itemize}
 
 \paragraph{Sessions.} The concept of a Session is crucial for maintaining a sense of continuity for a user across the stateless HTTP protocol. Once a user is authenticated, they can perform multiple actions, and the web application must be sure that each subsequent request is issued by the same user. For this reason, the server maintains a data structure that holds the user's current state and related information. This server-side data structure is called the session. Since HTTP is stateless, a unique session identifier must be constantly sent by the client and received by the server to look up and update the user's activity. There are many ways to manage and implement sessions, with the most commonly used mechanism being HTTP Cookies. A unique session ID is typically stored in a cookie on the client side; this cookie is then retransmitted with every request. The reliance on these external parameters can be dangerous if an attacker can access or hijack them, potentially leading to session hijacking and unauthorized access to the user's account.
+
+\subsection{Burp}
+Burp Suite is a professional, modular, Java-based software suite designed for comprehensive security testing and analysis of web applications. It operates fundamentally as an HTTP/HTTPS proxy, positioning itself as a man-in-the-middle to intercept, inspect, and modify all traffic between the client's browser and the target server. Its modular design allows for numerous extensions (plugins) and includes tools for executing various types of attacks, such as:
+
+\begin{itemize}
+    \item Web application enumeration.
+    \item Bruteforcing request (Intruder).
+    \item Manual manipulation and resending of requests (Repeater).
+    \item Automated scanning for known vulnerabilities (Scanner).
+\end{itemize}
+
+The \NewTexttt{Target} tool serves as the core hub for a penetration testing project, providing a consolidated, high-level overview of the target application's content and functionality. Its primary components and functions are:
+
+\begin{itemize}
+    \item \textit{Site map}: A hierarchical tree view that records all discovered application content (hosts, folders, files, parameters). This map is populated through traffic passing through the Proxy and through Live Passive Crawling. It helps the tester visualize the application's complete attack surface.
+    \item \textit{Scope}: This is used to explicitly define which hosts, protocols, and URLs are in-scope for the current testing project. Setting the scope is critical because it allows the tester to filter out irrelevant traffic in the Proxy history and Site map, and configure Burp's other tools to only process traffic directed at the intended target, preventing accidental attacks on out-of-scope systems.
+\end{itemize}
+
+Burp's security auditing capabilities are split into Active and Passive checks. Passive analysis is a fundamental, non-intrusive method of vulnerability identification. The passive scanner works by only analyzing the requests and responses that naturally pass through Burp's proxy. It does not send any new, modified, or specially crafted requests to the server, ensuring the target application is not affected or alerted.
+
+The \NewTexttt{Proxy} tool is the fundamental and most frequently used component of Burp Suite, acting as an intercepting web proxy. The proxy is configured to sit between your browser and the web application's server. All traffic must pass through Burp, making it a powerful MITM tool. The primary feature is its ability to intercept all incoming and outgoing HTTP/HTTPS messages. When interception is turned on, the tool holds the request or response, preventing it from continuing its journey until the tester manually forwards it. While a message is intercepted, the tester can inspect and modify any part of the raw data, including the URL, headers, and the message body. The HTTP History sub-tab logs every request and response that passes through the proxy. This creates a complete, searchable record of the application's entire traffic flow, which is essential for discovery and later analysis.
+
+The \NewTexttt{Repeater} tool is designed for manual, iterative testing of individual HTTP and WebSocket requests. It is the core tool for manually exploring the behavior of a specific application endpoint. It allows a tester to take a single request, modify it, and resend it repeatedly to the server without needing to interact with the browser again. Repeater is ideal for testing input-based vulnerabilities through trial and error, such as:
+
+\begin{itemize}
+    \item \textit{Injection Flaws} (e.g., SQL Injection, XSS) by repeatedly adjusting parameters with various payloads.
+    \item \textit{Access Control Flaws} (e.g., IDORs) by changing parameter values like user or product ids to access unauthorized resources.
+    \item \textit{State Manipulation} by sending requests in a specific sequence to test multistep processes.
+\end{itemize}
+
+Each request sent to Repeater is given its own tab, allowing the tester to work on multiple distinct test cases simultaneously. Within each tab, a full history of the modifications and corresponding server responses is maintained, making it easy to track testing progress and compare different responses.
+
+\paragraph{Spidering and Parameter Analysis.} Spidering is an essential reconnaissance technique used to automatically discover and map the entire content and hierarchy of a web application, including its folders, files, and links. Automatic spidering tools work by mimicking a user's navigation to systematically build a complete site map. The tool starts with an initial URL, analyzes the HTML content of the page, automatically detects all embedded links, parses forms, and follows these links to recursively discover deeper parts of the site. The \NewTexttt{robots.txt} file, typically located in the web app's main folder \NewTexttt{root}, contains a list of directories and files that search engines are requested not to retrieve. It is important to note that this is only a convention. A malicious spider will often check this file precisely because it may inadvertently expose hidden or sensitive areas of the application.
+
+Automatic tools are effective but face several limitations, especially with modern applications:
+
+\begin{itemize}
+    \item \textit{Dynamic Content}: They often cannot automatically parse content generated dynamically on the client-side (e.g., using complex JavaScript scripts), leading to skipped resources.
+    \item \textit{Non-Standard Content}: Links embedded within legacy objects like Flash or Java applets are frequently skipped.
+    \item \textit{Multi-State Functionality}: Complex workflows, such as multistep forms or multipage checkout processes, are often not parsed or traversed correctly as the tool may fail to maintain the necessary session state or required sequence of steps.
+    \item \textit{Authentication and Session}: Spiders generally cannot automatically handle authentication mechanisms. The tester must manually provide session tokens or configure Burp to manage the session state.
+\end{itemize}
+
+To overcome the limitations of automatic tools and to gain context, manual spidering is performed concurrently with the automatic process. The tester should manually attempt to access the paths listed in the \NewTexttt{robots.txt} file, as the list itself is an information disclosure vulnerability. Manually reviewing JavaScript source code can reveal URLs, functions, and endpoints that are never linked in the visible HTML but are called dynamically. The tester must manually log into the application and then browse through all privileged or user-specific pages. This action forces the traffic to pass through the Burp Proxy, populating the Site map with authenticated-session resources.
+
+In single-URL applications, the functionality is determined not by a new URL path, but by modifying a parameter within the request to a single resource. Spidering the base URL repeatedly will be unproductive. The key is to analyze and test the request parameters. The internal application logic is often controlled by a specific parameter, such as a hidden form field or a query string value.
+
+\begin{customcode}{HTTP}
+    \textcolor{teal}{POST} /bank.jsp \textcolor{teal}{HTTP/1.1}
+
+    \textcolor{RedOrange}{Host}: wahh-bank.com
+
+    \textcolor{RedOrange}{Content-Length}: 106
+
+    \textcolor{RedOrange}{servlet}=TransferFunds\&method=confirmTransfer\&fromAccount=10372918\&to
+
+    \hspace{4em}Account=3910852\&amount=291.23\&Submit=Ok
+\end{customcode}
+
+In the request above, the functionality being accessed is completely controlled by the \NewTexttt{servlet} and \NewTexttt{method} parameters. To enumerate other possible functionalities, a tester would use the Repeater or Intruder tools to modify these parameter values and observe the server's response. This is essential for discovering hidden or undocumented application functions.
