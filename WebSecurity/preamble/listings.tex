@@ -27,11 +27,46 @@
   numbers=none
 }
 
+\lstdefinestyle{sqlstyle}{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize\color{black},
+  keywordstyle=\color{keyword}\bfseries,
+  commentstyle=\color{comment}\itshape,
+  stringstyle=\color{string},
+  tabsize=2,
+  showstringspaces=false,
+  breaklines=true,
+  breakatwhitespace=true,
+  language=SQL,
+  numbers=none,
+}
+
+\lstdefinestyle{phpstyle}{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize\color{black},
+  keywordstyle=\color{keyword}\bfseries,
+  commentstyle=\color{comment}\itshape,
+  stringstyle=\color{string},
+  tabsize=2,
+  showstringspaces=false,
+  breaklines=true,
+  breakatwhitespace=true,
+  language=PHP,
+  numbers=none,
+}
+
 \NewDocumentCommand{\snakeicon}{O{1em}}{
   \raisebox{-0.2\height}{\includegraphics[height=#1]{assets/python}}
 }
 \NewDocumentCommand{\terminalicon}{O{1em}}{
   \raisebox{-0.2\height}{\includegraphics[height=#1]{assets/terminal}}
+}
+\NewDocumentCommand{\sqlicon}{O{1em}}{
+  \raisebox{-0.2\height}{\includegraphics[height=#1]{assets/sql}}
+}
+
+\NewDocumentCommand{\phpicon}{O{1em}}{
+  \raisebox{-0.2\height}{\includegraphics[height=#1]{assets/php}}
 }
 
 \newtcblisting{pythoncode}{
@@ -60,6 +95,42 @@
   coltitle=black,
   fonttitle=\footnotesize\ttfamily,
   title={\terminalicon\ Bash},
+  arc=4pt,
+  boxrule=0.5pt,
+  left=6pt,
+  right=6pt,
+  top=0pt,
+  bottom=6pt,
+  enhanced,
+  #1
+}
+
+\newtcblisting{sqlcode}[1][]{
+  listing only,
+  listing options={style=sqlstyle},
+  colback=codebg,
+  colframe=codeframe,
+  coltitle=black,
+  fonttitle=\footnotesize\ttfamily,
+  title={\sqlicon\ SQL},
+  arc=4pt,
+  boxrule=0.5pt,
+  left=6pt,
+  right=6pt,
+  top=0pt,
+  bottom=6pt,
+  enhanced,
+  #1
+}
+
+\newtcblisting{phpcode}[1][]{
+  listing only,
+  listing options={style=phpstyle},
+  colback=codebg,
+  colframe=codeframe,
+  coltitle=black,
+  fonttitle=\footnotesize\ttfamily,
+  title={\phpicon\ PHP},
   arc=4pt,
   boxrule=0.5pt,
   left=6pt,

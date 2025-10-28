@@ -1,1 +1,4 @@
-{red}{text}
+    user_input = request.form['username']
+    # Insecure: User input is inserted directly into the template structure
+    template = "<html><h1>Welcome, %s !</h1></html>" % user_input
+    return render_template_string(template)
