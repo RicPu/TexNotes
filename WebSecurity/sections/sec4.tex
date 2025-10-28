@@ -10,10 +10,10 @@ Databases are structured collections of data, modeling aspects of the real world
     SELECT * FROM users WHERE username='Markus' AND password='secret'
 \end{sqlcode}
 
-The danger lies in the fact that the appilcation is executing a single, constructed string that contains both the fixed query logic and the user-controlled data. If an attacker inserts characters that have special meaning in SQL (like a single quote \NewTexttt{'}), they can break out of the intended data field and inject their own SQL syntax, which the database interpreter will execute. A common goal in SQL is authentication bypass, often achieved using the \NewTexttt{OR 1 = 1} trick:
+The danger lies in the fact that the application is executing a single, constructed string that contains both the fixed query logic and the user-controlled data. If an attacker inserts characters that have special meaning in SQL (like a single quote \NewTexttt{'}), they can break out of the intended data field and inject their own SQL syntax, which the database interpreter will execute. A common goal in SQL is authentication bypass, often achieved using the \NewTexttt{OR 1 = 1} trick:
 
 \begin{enumerate}
-    \item \textit{Attacker Input}: The attacker enters a specially crafter string into the password field, such as: \NewTexttt{'OR 1 = 1 --'}.
+    \item \textit{Attacker Input}: The attacker enters a specially crafted string into the password field, such as: \NewTexttt{'OR 1 = 1 --'}.
     \item \textit{Resulting Query}: The application constructs the final SQL statement, which becomes:
           \begin{sqlcode}
               SELECT * FROM users WHERE username='Markus' AND password='' OR 1 = 1 --'
@@ -21,7 +21,7 @@ The danger lies in the fact that the appilcation is executing a single, construc
     \item \textit{Database Interpretation}: The first single quote closes the opening quote for the password field. The \NewTexttt{OR 1 = 1} is injected into the query logic. Since \NewTexttt{1 = 1} is always true, the entire \NewTexttt{WHERE} clause condition new evaluates to true. The \NewTexttt{--} is a SQL comment operator. It tells the database to ignore all subsequent text in the query string, which effectively nullifies the final closing single quote and any other trailing query components, preventing a syntax error.
 \end{enumerate}
 
-Because the \NewTexttt{WHERE} condition is univerally true, the query returns the record for the specified user without needing the correct password, thus successfully logging the attacker in.
+Because the \NewTexttt{WHERE} condition is universally true, the query returns the record for the specified user without needing the correct password, thus successfully logging the attacker in.
 
 \paragraph{Second Order SQL Injection.} Protecting against SQL Injection often involves input validation and sanitization, such as escaping single quotes (e.g., turning \NewTexttt{'} into \NewTexttt{''}). However, if this validation is applied only at the initial entry point, a vulnerability known as Second-Order SQL Injection can occur. In this attack, the malicious payload is stored by the application in the database during an initial, non-exploitable transaction. When the application executes a second query at a later time, retrieving and using this stored, unsanitized value, the attack is triggered.
 
@@ -48,7 +48,7 @@ This technique prevents the attacker from modifying the query's intent, regardle
 \subsection{Command Injection}
 Command Injection is a vulnerability that allows an attacker to execute arbitrary operating system commands on the host server. This flaw arises when a web application incorporates unvalidated user inputs directly into functions that are designed to execute system-level commands or shell commands. Many web applications, particularly those written in interpreted languages like PHP, use system-related APIs or functions to interact with the underlying OS. If an attacker can inject special shell characters into the user input, they can effectively terminate the intended command and append an arbitrary command for execution.
 
-\paragraph{Example of Command Injection.} The \NewTexttt{eval()} functino in PHP takes a string and executes it as PHP code. I a web page uses an external parameter to construct the code passed to \NewTexttt{eval()}, it introduces a high-risk vulnerability.
+\paragraph{Example of Command Injection.} The \NewTexttt{eval()} function in PHP takes a string and executes it as PHP code. I a web page uses an external parameter to construct the code passed to \NewTexttt{eval()}, it introduces a high-risk vulnerability.
 
 \begin{phpcode}
     $storedsearch = $_GET['storedsearch'];
