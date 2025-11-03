@@ -1,0 +1,201 @@
+\section{Injection-Based Attacks}
+Injection is a class of vulnerability where an application is tricked into processing user-supplied data as executable code or commands. This typically arises when an application incorporates unvalidated user input directly into a code interpreter. The exploited technology often relies on interpreted languages, allowing an attacker to modify the logical flow of the application. The primary goals of injection attacks include bypassing authentication, extracting sensitive information, or achieving remote code execution. The three major types include SQL Injection, Command Injection, and Server-Side Template Injection.
+
+\subsection{SQL Injection}
+Databases are structured collections of data, modeling aspects of the real world. While many types exist (e.g., relational, NoSQL, graph), relational databases are the most common target for SQL injections. Data in relational databases is organized into tables, with rows representing individual records and columns defining the fields or attributes. SQL (Structured Query Language) is the standard language for managing and manipulating data in these databases.
+
+\paragraph{Authentication Bypass.} User authentication often relies on checking credentials against a database. A vulnerable application might construct an authentication query by directly concatenating user input into the SQL string. Consider a login attempt where the username is \NewTexttt{Markus} and the password is \NewTexttt{secret}. A typical, vulnerable query structure might look like this:
+
+\begin{sqlcode}
+    SELECT * FROM users WHERE username='Markus' AND password='secret'
+\end{sqlcode}
+
+The danger lies in the fact that the application is executing a single, constructed string that contains both the fixed query logic and the user-controlled data. If an attacker inserts characters that have special meaning in SQL (like a single quote \NewTexttt{'}), they can break out of the intended data field and inject their own SQL syntax, which the database interpreter will execute. A common goal in SQL is authentication bypass, often achieved using the \NewTexttt{OR 1 = 1} trick:
+
+\begin{enumerate}
+    \item \textit{Attacker Input}: The attacker enters a specially crafted string into the password field, such as: \NewTexttt{'OR 1 = 1 --'}.
+    \item \textit{Resulting Query}: The application constructs the final SQL statement, which becomes:
+          \begin{sqlcode}
+              SELECT * FROM users WHERE username='Markus' AND password='' OR 1 = 1 --'
+          \end{sqlcode}
+    \item \textit{Database Interpretation}: The first single quote closes the opening quote for the password field. The \NewTexttt{OR 1 = 1} is injected into the query logic. Since \NewTexttt{1 = 1} is always true, the entire \NewTexttt{WHERE} clause condition new evaluates to true. The \NewTexttt{--} is a SQL comment operator. It tells the database to ignore all subsequent text in the query string, which effectively nullifies the final closing single quote and any other trailing query components, preventing a syntax error.
+\end{enumerate}
+
+Because the \NewTexttt{WHERE} condition is universally true, the query returns the record for the specified user without needing the correct password, thus successfully logging the attacker in.
+
+\paragraph{Second Order SQL Injection.} Protecting against SQL Injection often involves input validation and sanitization, such as escaping single quotes (e.g., turning \NewTexttt{'} into \NewTexttt{''}). However, if this validation is applied only at the initial entry point, a vulnerability known as Second-Order SQL Injection can occur. In this attack, the malicious payload is stored by the application in the database during an initial, non-exploitable transaction. When the application executes a second query at a later time, retrieving and using this stored, unsanitized value, the attack is triggered.
+
+\begin{enumerate}
+    \item \textit{First Query}: A user changes their display name to a payload like \NewTexttt{MarkO' Evil}. The application may correctly escape the quote before storing it, resulting in \NewTexttt{MarkO'' Evil} in the database.
+    \item \textit{Second Query}: A separate administrative function later executes a query that retrieves and uses this stored data without applying sanitization. If the stored value is \NewTexttt{MarkO' Evil}, a query like the following will break the SQL syntax and potentially allow the attacker to inject their code:
+          \begin{sqlcode}
+              SELECT report_data FROM logs WHERE user_name='MarkO' Evil'
+          \end{sqlcode}
+\end{enumerate}
+
+\paragraph{Blind SQL Injection.} Blind SQL Injection occurs when the attacker does not receive direct feedback from the database execution. Instead of seeing results, the attacker must infer the database structure and data by observing the application's behavior or response time to various injected conditions.
+
+\paragraph{Defending Against SQL Injection.} The most effective and fundamental defense against SQL Injection is the use of parametrized queries, also known as Prepared Statements. This defensive approach enforces a strict separation between the SQL query structure and the user-supplied data.
+
+\begin{enumerate}
+    \item \textit{Preparation}: The application first sends a template of the SQL query to the database, where the position for user input are replaced with placeholders.
+    \item \textit{Execution}: The application then sends the user input to the database separately as a parameter.
+    \item \textit{Database Handling}: The database API is designed to treat the data in the parameter exclusively as a literal string value, never as executable SQL code. This means any embedded quotes or special SQL syntax in the user input are automatically neutralized, preventing the malicious code from breaking the original query structure.
+\end{enumerate}
+
+This technique prevents the attacker from modifying the query's intent, regardless of what they submit.
+
+\subsection{Command Injection}
+Command Injection is a vulnerability that allows an attacker to execute arbitrary operating system commands on the host server. This flaw arises when a web application incorporates unvalidated user inputs directly into functions that are designed to execute system-level commands or shell commands. Many web applications, particularly those written in interpreted languages like PHP, use system-related APIs or functions to interact with the underlying OS. If an attacker can inject special shell characters into the user input, they can effectively terminate the intended command and append an arbitrary command for execution.
+
+\paragraph{Example of Command Injection.} The \NewTexttt{eval()} function in PHP takes a string and executes it as PHP code. I a web page uses an external parameter to construct the code passed to \NewTexttt{eval()}, it introduces a high-risk vulnerability.
+
+\begin{phpcode}
+    $storedsearch = $_GET['storedsearch'];
+    eval("$storedsearch;");
+\end{phpcode}
+
+The attacker exploits the semicolon to separate the intended, harmless statement from their malicious command. The input is URL-encoded.
+
+\begin{itemize}
+    \item \textit{Input}: \NewTexttt{/search.php?storedsearch=\$search=wahh;\%20system('cat\%20/etc/passwd')}
+    \item \textit{Server Executes}: \NewTexttt{eval("\$search=wahh; system('cat /etc/passwd');");}
+\end{itemize}
+
+The database will execute the arbitrary OS command \NewTexttt{cat /etc/passwd}, causing the contents of the critical system file to be displayed to the attacker. Attackers initially test for this flaw by submitting common shell characters like \NewTexttt{;} or \NewTexttt{\&} to observe if the application responds with an error or executes the injected command.
+
+\paragraph{Path Traversal.} Path Traversal is a distinct but related vulnerability often found in file-handling functionalities. This attack exploits flaws in how an application constructs file paths, allowing the attacker to access files and directories outside of the application's intended root directory. This vulnerability typically occurs when the server uses user-supplied input to specify the name or path of a file to be opened or read.
+
+\begin{itemize}
+    \item \textit{Intended Access URL}: \NewTexttt{http://example.com/GetFile.ashx?filename=keira.jpg}
+
+          The server's code expects to open \NewTexttt{keira.jpg} within the secure file store directly.
+    \item \textit{Path Traversal Attack}: The attacker injects the directory traversal sequence \NewTexttt{../}, which means "go up one directory level". By chaining multiple of these sequences, the attacker attempts to navigate upward in the file system hierarchy until they reach the root directory. From there, they specify the path to a sensitive system file, such as \NewTexttt{/etc/passwd}.
+\end{itemize}
+
+If the server fails to sanitize the \NewTexttt{filename} parameter by stripping or resolving the \NewTexttt{../} sequences, it will execute the instruction to read the contents of the \NewTexttt{/etc/passwd} file and display it.
+
+\paragraph{PHP Code Injection.} Code Injection is a variation of injection attacks where the attacker injects and executes arbitrary programming language code rather than OS commands. This is highly common in PHP due to functions like \NewTexttt{eval()}. The vulnerability occurs when a code evaluation function's content can be partially or fully controlled by the user. This often leads to maximum impact, as the injected code executes with the same privileges as the application itself.
+
+\begin{phpcode}
+    eval("\$$user = '$regdate'");
+\end{phpcode}
+
+The code above is intended to dynamically create a variable named after the content of \NewTexttt{\$user} (e.g., if \$user is \NewTexttt{username}), the resulting code is \NewTexttt{eval("\$username = 'date'")}. The attacker controls this variable and injects a payload that includes PHP syntax separators (\NewTexttt{;}). The server concatenates the string and executes:
+
+\begin{phpcode}
+    eval("\$x = 'y';phpinfo();// = '$regdate'");
+\end{phpcode}
+
+The semicolon successfully terminates the intended statement and allows the insertion of the malicious code: \NewTexttt{phpinfo()}. The double forward slash comments out the remaining, syntactically-incorrect portion of the original string, preventing a parse error. The function \NewTexttt{phpinfo()} then executes, leaking extensive configuration and sensitive details about the PHP environment.
+
+\subsection{Server-Side Template Injection}
+Server-Side Template Injection (SSTI) is a critical vulnerability that occurs when user-supplied input is insecurely processed and rendered directly within a server-side template engine. Template engines are a vital part of modern web applications, separating application logic from presentation. They facilitate the creation of dynamic HTML pages by combining static content with dynamic data. The core components involved are:
+
+\begin{itemize}
+    \item \textit{Data Source}: The dynamic data (e.g., username, product list) provided by the application logic.
+    \item \textit{Web Template}: The file or string containing the static HTML structure and placeholders for dynamic data.
+    \item \textit{Template Engine}: The server-side software (e.g., Jinja2, Twig, Velocity) that combines the data source with the web template to generate the final output sent to the user's browser.
+\end{itemize}
+
+Template engines are a fundamental feature of many popular web frameworks, such as Django and Flask.
+
+\paragraph{Example of Vulnerable Code.} SSTI arises when the web application constructs a template by concatenating unsanitized user input directly into the template definition string, and then instructs the template engine to parse that newly created string. The security flaw is evident in how the \NewTexttt{user\_input} is merged directly into the template string before rendering.
+
+\begin{pythoncode}
+    user_input = request.form['username']
+    # Insecure: User input is inserted directly into the template structure
+    template = "<html><h1>Welcome, %s !</h1></html>" % user_input 
+    return render_template_string(template)
+\end{pythoncode}
+
+If an attacker enters a template expression, such as \NewTexttt{\{\{7*7\}\}}, as the username, the template engine will interpret it, perform the calculation, and render "Welcome, 49!" instead of the literal input string.
+
+SSTI can be exploited because template languages are designed to handle complex logic, including functions, object manipulation, and sometimes, direct access to the underlying programming language's objects and methods. The fundamental steps for exploitation are:
+
+\begin{enumerate}
+    \item \textit{Detection}: Identifying the vulnerability by testing basic template expressions (e.g., \NewTexttt{\$\{7*7\}}, \NewTexttt{\{\{7*7\}\}}, \NewTexttt{<\%= 7*7 \%>}).
+    \item \textit{Engine Identification}: Determining the specific template engine and its version, as this dictates the exact syntax and objects available for exploitation.
+    \item \textit{Exploit Crafting}: Constructing a payload to execute commands. This is often achieved by abusing features that allow navigation through the host language's object inheritance chain (e.g., in Python's Jinja2, using special objects like \NewTexttt{\_\_globals\_\_}) to access system libraries and execute operating system commands.
+\end{enumerate}
+
+The final impact of a successful SSTI exploit is typically Remote Code Execution (RCE), allowing an attacker to execute arbitrary commands on the web server itself.
+
+\subsection{Lab 4}
+\subsubsection{Task 2 - Command Injection}
+The task is composed of two parts:
+
+\begin{enumerate}
+    \item Complete the Command Injection tasks of the DVWA at low, medium and high difficulty. The goal is to print the \NewTexttt{/etc/passwd} file stored in the server.
+    \item Solve Natas levels 9 and 10.
+\end{enumerate}
+
+\paragraph{Solution.} 
+
+\begin{enumerate}
+    \item \textit{Level 9} (\NewTexttt{t7I5VHvpa14sJTUGV0cbEsbYfFP2dmOu}): This level is composed of a search bar and a php source code. By inspecting the source code we can see that there is no protection against command injection, so a simple \NewTexttt{; cat /etc/natas\_webpass/natas10} prints the password to screen.
+    \item \textit{Level 10} (\NewTexttt{UJdqkK1pTu6VLt9UHWAgRZz6sVUZ3lEk}): This level the same as the one before, but it now filters the symbols \NewTexttt{|}, \NewTexttt{;} and \NewTexttt{\&}. However, we can still use the grep function to look at the entire contents of the \NewTexttt{/etc/natas\_webpass/natas11} directory using \NewTexttt{.* /etc/natas\_webpass/natas11 \#}. This shows a few entries, and the last one is the password we need.
+\end{enumerate}
+
+\subsubsection{Task 3 - PHP and Cookie Encryption}
+Consider the PHP code of Natas level 11. You are required to describe the following accurately:
+
+\begin{enumerate}
+    \item The functionality of each function of the code.
+    \item How the cookie is encrypted.
+    \item Why the employed encryption is weak and how you can crack it. What kind of decryption function is required?
+\end{enumerate}
+
+Finally, try to solve Natas 11 and provide the password for the next level.
+
+\paragraph{Solution.} The main flow of the PHP code is the following. In here, the variable \NewTexttt{data} is loaded with the function \NewTexttt{loadData()}. Then, the input from the user, once sanitized, is used to change the background color. When this is done, data is saved with the function \NewTexttt{saveData()}.
+
+\begin{phpcode}
+$data = loadData($defaultdata);
+
+if(array_key_exists("bgcolor",$_REQUEST)) {
+    if (preg_match('/^#(?:[a-f\d]{6})$/i', $_REQUEST['bgcolor'])) {
+        $data['bgcolor'] = $_REQUEST['bgcolor'];
+    }
+}
+
+saveData($data);
+\end{phpcode}
+
+In the next portion of code, we can take a look at the \NewTexttt{loadData} function. The function gets access to the global \NewTexttt{\$\_COOKIE} superglobal, which holds all cookies sent by the browser. If the browser sends a cookie called \NewTexttt{"data"}, the function proceeds to decode and validate it. The cookie value is Base64-decoded, xor-encrypted and json decoded. Once this is done, the data is updated with the user inserted data and returned.
+
+\begin{phpcode}
+function loadData($def) {
+    global $_COOKIE;
+    $mydata = $def;
+    if(array_key_exists("data", $_COOKIE)) {
+        $tempdata = json_decode(xor_encrypt(base64_decode($_COOKIE["data"])), true);
+        if(is_array($tempdata) && array_key_exists("showpassword", $tempdata) && array_key_exists("bgcolor", $tempdata)) {
+            if (preg_match('/^#(?:[a-f\d]{6})$/i', $tempdata['bgcolor'])) {
+            $mydata['showpassword'] = $tempdata['showpassword'];
+            $mydata['bgcolor'] = $tempdata['bgcolor'];
+            }
+        }
+    }
+    return $mydata;
+} 
+\end{phpcode}
+
+Finally, the function that does the actual encryption. This function uses a repeating XOR key to "encrypt" cookies, but it's insecure because XOR with a known or guessed plaintext easily reveals the key, allowing attackers to forge cookies.
+
+\begin{phpcode}
+function xor_encrypt($in) {
+    $key = '<censored>';
+    $text = $in;
+    $outText = '';
+
+    // Iterate through each character
+    for($i=0;$i<strlen($text);$i++) {
+    $outText .= $text[$i] ^ $key[$i % strlen($key)];
+    }
+
+    return $outText;
+}
+\end{phpcode}
+
+Now, for the actual solution. Since we know the default data value for the cookie, which is \NewTexttt{"showpassword"=>"no", "bgcolor"=>"\#ffffff"}, we can take a look at the current cookie value from Burp: \NewTexttt{HmYkBwozJw4WNyAAFyB1VUcqOE1JZjUIBis7ABdmbU1GIjEJAyIxTRg=}. We can Base64-decode this into: \NewTexttt{}
