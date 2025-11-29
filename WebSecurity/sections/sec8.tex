@@ -1,0 +1,109 @@
+\section{Static Analysis}
+
+\subsection{Calling Conventions}
+Static Analysis relies on understanding the low-level behavior of functions, which is largely governed by the Calling Convention used. The calling convention is a standardized agreement between the calling function (caller), and the called function (callee) that dictates the precise mechanism of a function call. A calling convention defines three essential aspects:
+
+\begin{enumerate}
+    \item \textit{Parameter Passing}: How many arguments are passed (on the stack or in registers).
+    \item \textit{Return Value}: How the function's result is returned to the caller.
+    \item \textit{Stack Cleanup}: Which function (caller or callee) is responsible for cleaning up the parameters pushed onto the stack.
+\end{enumerate}
+
+The function result is typically returned via the \NewTexttt{EAX} (32-bit) or \NewTexttt{RAX} (64-bit) register.
+
+\paragraph{Common x86 Calling Conventions.} The following conventions are frequently encountered during static analysis, particularly in 32-bit executables, and they primarily differ in their stack cleanup and parameter passing rules:
+
+\begin{table}[!b]
+    \centering
+    \small
+    \begin{tabular}{
+        >{\raggedright\arraybackslash}p{0.15\textwidth}
+        >{\raggedright\arraybackslash}p{0.14\textwidth}
+        >{\raggedright\arraybackslash}p{0.25\textwidth}
+        >{\raggedright\arraybackslash}p{0.35\textwidth}
+        }
+        \toprule
+        \textbf{Convention}    & \textbf{Cleanup}         & \textbf{Parameter Order}                                                                                                                                        & \textbf{Mechanism}                                                                                                                                                                                                            \\
+        \midrule
+        \NewTexttt{\_cdecl}    & Caller cleans the stack. & Right-to-Left (First parameter is pushed last, at the lowest address).                                                                                          & The standard convention for C variable-argument functions (e.g., \NewTexttt{printf}). The caller cleans up, making it suitable for functions with a variable number of arguments.                                             \\
+        \NewTexttt{\_stdcall}  & Callee cleans the stack. & Right-to-Left.                                                                                                                                                  & Used by most Windows API functions. Since the callee cleans the stack, the function definition must know the exact number and size of its parameters.                                                                         \\
+        \NewTexttt{\_fastcall} & Callee cleans the stack. & Primarily uses registers (\NewTexttt{ECX} and \NewTexttt{EDX} on x86, with \NewTexttt{EAX} sometimes used), falling back to the stack for additional arguments. & Optimized for speed by minimizing memory access. Best suited for functions with few arguments (typically two to three).                                                                                                       \\
+        \NewTexttt{\_thiscall} & Callee cleans the stack. & Right-to-Left (for stack arguments).                                                                                                                            & Used specifically by C++ member functions. It is similar to \NewTexttt{\_stdcall}, but the implicit \NewTexttt{this} pointer (a reference to the object) is passed in the \NewTexttt{ECX} register, rather than on the stack. \\
+        \bottomrule
+    \end{tabular}
+    \caption{Comparison of common x86 calling conventions - \NewTexttt{\_cdecl}, \NewTexttt{\_stdcall}, \NewTexttt{\_fastcall}, and \NewTexttt{\_thiscall} - highlighting stack cleanup responsibility, parameter-passing order, and usage context.}
+\end{table}
+
+It is important to remember that different compilers may establish their own conventions or use compiler-specific names for these standards, so an analyst must always verify the actual low-level assembly implementation.
+
+\paragraph{Assembly x86-64.} The x86-64 architecture is the 64-bit extension of the original x86 instruction set. This architecture is crucial for modern malware analysis and reverse engineering as it governs the vast majority of current operating systems and applications. The x64 architecture provides 16 general-purpose registers (from \NewTexttt{RAX} to \NewTexttt{R15}), compared to the 8 registers in 32-bit. All these registers are 64-bit wide, enabling 64-bit operations and data handling. It also uses 64-bit memory addressing, allowing the system to access a vastly larger theoretical memory space than the 4 GB limit of x86.
+
+The standard calling convention for x64 on Windows significantly changes how arguments are passed compared to the x86 stack-based conventions. The first four integer or pointer arguments are passed via specific general-purpose registers, removing the need for immediate stack operations and speeding up function calls. The order of registers used is: \NewTexttt{RCX}, \NewTexttt{RDX}, \NewTexttt{R8}, \NewTexttt{R9}. Any subsequent arguments are pushed onto the stack. The caller function is responsible for cleaning up the stack, if any arguments were pushed there. The registers are assigned in order from the first parameter to the fourth parameter, not from the last parameter.
+
+The x64 architecture natively supports more advanced data types and operations, particularly for floating-point and SIMD (Single Instruction, Multiple Data) processing.
+
+\begin{itemize}
+    \item \textit{XMM Registers}: These are special 128-bit registers that were introduced with the Streaming SIMD Extension (SSE) instruction sets. x64 extends the number of these registers to 16.
+    \item \textit{Data Storage}: Each 128-bit XMM register can store:
+          \begin{itemize}
+              \item Two 64-bit floating-point values (for double-precision).
+              \item Four 32-bit floating-point values (for single-precision).
+              \item Various integer data types for parallel processing.
+          \end{itemize}
+\end{itemize}
+
+\subsection{Decompilation}
+Decompilation is an advanced reverse engineering technique that aims to reconstruct a high-level source code representation from the original, low-level assembly language of a compiled program. This process involves more than just translating assembly instructions; a decompiler must perform complex analysis to infer:
+
+\begin{itemize}
+    \item \textit{Data Types and Structures}: The decompiler attempts to identify the original data types, complex structures, and arrays that were abstracted away during compilation.
+    \item \textit{Control Flow}: It analyzes assembly jump and condition instructions to reconstruct high-level control structures like \NewTexttt{if/else} statements, \NewTexttt{for} loops, and \NewTexttt{while} loops.
+    \item \textit{Variable Usage}: It tracks register and stack usage to synthesize human-readable variables (often using custom generic names).
+\end{itemize}
+
+The main advantage of decompilation is the significant increase in code readability. Analyzing thousands of lines of C code is dramatically faster and more intuitive than analyzing the equivalent assembly code. Decompilers allow the analyst to rename custom variables, functions, and structures. This is a crucial step in static analysis, as assigning meaningful names makes the code self-documenting. While an advantage is often cited as the ability to re-compile the decompiled code, this is generally not straightforward and is only possible with significant manual cleanup and correction. Decompilers often use custom types and library calls (like IDA's \NewTexttt{defs.h} header) that are necessary to make the decompiled code syntactically correct, but may not perfectly reproduce the original source.
+
+\paragraph{Recognizing Code Constructs.} While decompilation offers a high-level view that greatly aids comprehension, it is never a standalone analysis technique. Its output must be continually compared against the original disassembly, which is often more reliable and precise, especially when the decompiler struggles with complex constructs. Decompilers face several inherent challenges when translating machine code back to source code:
+
+\begin{itemize}
+    \item \textit{Distinguishing Code from Data}: Like disassemblers, decompilers can sometimes confuse data sections (e.g., initialized variables, constant tables) with executable code, leading to corrupted or nonsensical output.
+    \item \textit{Inferring Data Types}: The compiler discards high-level type information (like custom \NewTexttt{typedef} or complex user-defined structures) during compilation. The decompiler must infer the correct return and variable types based on how they are used, which is prone to error.
+    \item \textit{Complex Control Structures}: Analyzing and reconstructing intricate control flow elements can be difficult, such as translating a jump table back into a high-level \NewTexttt{switch} statement, or correctly identifying the boundaries and conditions of multiple nested \NewTexttt{for} or \NewTexttt{while} loops.
+\end{itemize}
+
+Effective analysis requires understanding how high-level logic is expressed in assembly language, particularly concerning control flow. Conditional branches (like \NewTexttt{if} statements) are implemented using two main steps:
+
+\begin{enumerate}
+    \item \textit{Setting Flags}: Instructions like \NewTexttt{CMP} (Compare) or \NewTexttt{TEST} perform a subtraction or logical operation between two operands and set specific status FLAGS (e.g., Zero Flag, Sign Flag, Carry Flag) in the \NewTexttt{EFLAGS} or \NewTexttt{RFLAGS} register, but they do not store the result.
+    \item \textit{Conditional Jump}: A subsequent conditional jump instruction then checks the state of one or more flags to decide whether to jump.
+
+          \begin{table}[!b]
+              \centering
+              \begin{tabular}{
+                  >{\raggedright\arraybackslash}p{0.15\textwidth}
+                  >{\raggedright\arraybackslash}p{0.33\textwidth}
+                  >{\raggedright\arraybackslash}p{0.36\textwidth}
+                  }
+                  \toprule
+                  \textbf{Instruction}               & \textbf{Condition}                        & \textbf{Meaning}                                                                           \\
+                  \midrule
+                  \NewTexttt{JZ} or \NewTexttt{JE}   & Zero Flag is set (\NewTexttt{ZF = 1})     & Jump if the result of the previous operation was zero (or if operands were equal).         \\
+                  \NewTexttt{JNZ} or \NewTexttt{JNE} & Zero Flag is not set (\NewTexttt{ZF = 0}) & Jump if the result of the previous operation was non-zero (or if operands were not equal). \\
+                  \bottomrule
+              \end{tabular}
+              \caption{Common conditional jump instructions in x86 assembly: \NewTexttt{JZ}/\NewTexttt{JE} and \NewTexttt{JNZ}/\NewTexttt{JNE} and their dependence on the Zero Flag (\NewTexttt{ZF}) to control flow based on equality or zero-result conditions.}
+          \end{table}
+\end{enumerate}
+
+Arrays are typically accessed using sequential memory addressing. A general-purpose register (like \NewTexttt{RCX} or \NewTexttt{RSI}) is often employed as an index or offset, which is scaled by the element size and added to the array's base address. A \NewTexttt{for} loop is usually recognized by:
+
+\begin{enumerate}
+    \item An initialization of the counter variable before the loop starts.
+    \item A \NewTexttt{CMP} instruction followed by a conditional jump at the beginning or end of the loop, serving as the exit condition.
+    \item An increment or decrement instruction applied to the counter variable within the loop body.
+    \item A back-arrow jump in the control flow graph, which returns execution to the condition check.
+\end{enumerate}
+
+A \NewTexttt{while} loop is structurally similar to a \NewTexttt{for} loop but often lacks the dedicated increment/decrement instruction within the loop's structure; the condition check is typically placed at the top.
+
+A \NewTexttt{switch} statement with many cases is typically compiled into a jump table, offering faster execution than a chain of nested \NewTexttt{if/else} conditions. The value of the \NewTexttt{switch} variable (the case selector) is used to calculate an index into an array of code addresses (the jump table). The program then uses an indirect jump instruction to transfer control directly to the code block corresponding to that specific case. The array of addresses is stored in a predetermined, often read-only, data section of the file (frequently referenced via a data segment register like \NewTexttt{ds:}) and consists of sequential addresses. While the table stores consecutive addresses, the size of the assembly code for each case block can vary, and the case values themselves may not be consecutive. A \NewTexttt{switch} statement with only a few cases is more often translated into a series of nested \NewTexttt{if} conditions using standard \NewTexttt{CMP} and conditional \NewTexttt{JMP} instructions.

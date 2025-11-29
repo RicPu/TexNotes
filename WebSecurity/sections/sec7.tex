@@ -1,0 +1,69 @@
+\section{Elements of Assembly x86-64}
+When conducting binary analysis, specifically in reverse engineering and malware analysis, understanding the program's actions requires a deep comprehension of the executable code and its relationship with memory. Static analysis is a fundamental technique used here; it involves examining the program's functionality without executing the code. This is primarily achieved through disassembling, the process of converting the compiled machine code back into human-readable assembly language, while also extracting vital information such as instruction offsets, embedded strings, and cross-references.
+
+To effectively employ disassembling, an analyst must master two key areas: the architecture of the x86-64 assembly language and the crucial roles of the Stack and the Heap within the process's memory space.
+
+\subsection{Stack and Heap Memory Management}
+A running program, or process, is allocated a specific memory layout in User Land (as opposed to Kernel Land, the protected OS portion containing device drivers and memory management structures). This memory space is logically divided into several segments, including the Code/Data segments (Program Image), the Heap, and the Stack.
+
+\paragraph{Stack.} The Stack is used for automatically managed, temporary memory that is organized into functional units called Stack Frames (or activation records). It supports function call management. Each time a function is called, a new Stack Frame is allocated. A Stack Frame contains essential information for the function's execution and cleanup, including:
+
+\begin{itemize}
+    \item Function Arguments (Parameters).
+    \item The Return Address (the address in the calling function's code where execution should resume).
+    \item The Previous Frame Pointer (the address of the calling function's base pointer).
+    \item Local Variables defined within the function.
+\end{itemize}
+
+The Stack typically starts at a higher memory address and grows downwards toward lower addresses (the opposite of how memory is usually allocated for the process image). A stack frame is managed by two primary registers:
+
+\begin{itemize}
+    \item \textit{RSP (Stack Pointer, or SP in 32-bit)}: The current pointer that is constantly adjusted (mobile) to point to the top (lowest address) of the stack.
+    \item \textit{RBP (Base Pointer, or BP in 32-bit)}: A fixed pointer that marks the base of the current stack frame, providing a stable reference point for accessing local variables and arguments.
+\end{itemize}
+
+The method of passing arguments to a function is defined by the Calling Convention, which differs between x86 and x86-64:
+
+\begin{itemize}
+    \item \textit{x86 (32-bit)}: Arguments are typically pushed onto the stack before the function call, with the first argument placed at the lowest address (closest to the return address).
+    \item \textit{x86-64 (64-bit)}: Arguments are passed primarily using registers. The first six integer/pointer arguments are passed via specific registers, and only subsequent arguments are pushed onto the stack.
+\end{itemize}
+
+\paragraph{Heap.} The Heap is used for dynamically allocated memory - memory whose size is determined at runtime (e.g., using functions like \NewTexttt{malloc} or \NewTexttt{new}). It is used for long-lived data that must persist outside the scope of a single function call. Heap memory is managed by the operating system or the application's runtime library, which tracks allocated blocks to prevent memory fragmentation and leakage. Unlike the Stack, the programmer is responsible for explicitly freeing the memory once it is no longer needed.
+
+\paragraph{Memory Layout.} The arrangement of the process's memory space in User Land is generally:
+
+\begin{enumerate}
+    \item \textit{Program Image (Code/Data)}: Typically located at a mid-range address.
+    \item \textit{Heap}: Grows upwards toward higher addresses.
+    \item \textit{Stack}: Grows downwards toward lower addresses.
+\end{enumerate}
+
+The exact positions of the Program Image, Heap, and Stack can be randomized across different executions due to security features like Address Space Layout Randomization (ASLR), which is intended to frustrate attackers. Process Environment Block (PEB) is a data structure used by the OS and application to store information about the running process. This includes the image base address, loader lock status, and security information (like whether the process is being debugged). Thread Environment Block (TEB) is a structure that holds information specific to a single thread of execution, such as its stack base, stack limit, and the pointer to the PEB\@.
+
+\subsection{Assembly x86-64}
+Intel CISC means Complex Instruction Set Computer, and it contains a lot of instructions. We will use the Intel convention (opcode, source, destination), and everythin uses Little endian: less significant bytes fo to lower addresses. This means that whenever a pointer refers to a memory block, this will always point to the lowest part of the block (example here please).
+
+\begin{table}[!b]
+    \centering
+    \begin{tabular}{
+        >{\raggedright\arraybackslash}p{0.25\textwidth}
+        >{\raggedright\arraybackslash}p{0.65\textwidth}
+        }
+        \toprule
+        \textbf{OpCode}        & \textbf{Instruction}                                       \\
+        \midrule
+        \NewTexttt{PUSH}       & Push words to the stack.                                   \\
+        \NewTexttt{POP}        & Remove words from the stack.                               \\
+        \NewTexttt{MOV}        & Move values from reg to reg or from reg to memory.         \\
+        \NewTexttt{ADD/SUB}    & Add/Subtract values from registers.                        \\
+        \NewTexttt{AND/OR/XOR} & Logical AND/OR/XOR operation.                              \\
+        \NewTexttt{CALL}       & Call a function.                                           \\
+        \NewTexttt{NOP}        & Do not perform anything.                                   \\
+        \NewTexttt{LEAVE}      & Complete some operations on the stack when functions quit. \\
+        \NewTexttt{RET}        & Same as \NewTexttt{return} in C.                           \\
+        \NewTexttt{LEA}        & Set a register with memory address.                        \\
+        \bottomrule
+    \end{tabular}
+    \caption{A core set of commonly used x86 assembly instructions.}
+\end{table}
