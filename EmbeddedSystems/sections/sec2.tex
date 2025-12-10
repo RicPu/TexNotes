@@ -51,11 +51,11 @@ A typical synchronous parallel bus — though increasingly rare in modern low-pi
 
 \vspace{\baselineskip}
 
-\begin{minipage}{0.55\textwidth}
+\begin{minipage}{0.515\textwidth}
     \paragraph{An example.} The communication cycle begins when the processor places the address of a target peripheral — or a specific register within it — onto the address bus. At the same time, it drives the control bus with signals indicating the operation type (e.g., read), data width, and timing parameters. The master then enters a wait state, allowing the peripheral time to prepare the requested data. Once ready, the slave places the data onto the data bus and asserts a ready (or acknowledge) signal on the control bus to confirm completion. Upon detecting this handshake, the master latches the data and concludes the transaction, immediately advancing to the next stage — whether initiating another transfer, processing the received value, or continuing program execution.
 \end{minipage}
 \hfill
-\begin{minipage}{0.50\textwidth}
+\begin{minipage}{0.475\textwidth}
     \centering
     \begin{tikzpicture}[scale=0.75, transform shape, >=Latex, very thick, font=\footnotesize\ttfamily]
         \draw [fill=orange!40] (0, 0) rectangle ++(1, 10) node [midway, above=5.25cm] {\textbf{Processor}};
@@ -68,3 +68,118 @@ A typical synchronous parallel bus — though increasingly rare in modern low-pi
         \draw [dashed, draw=gray] (1, 1.5) -- (7, 1.5) node [midway, below=0.25cm, align=center] {Processor reads the data and \\ starts the next operation};
     \end{tikzpicture}
 \end{minipage}
+
+\paragraph{ARM AMBA System Bus.} The Advanced Microcontroller Bus Architecture (AMBA) is an open-standard on-chip interconnect specification developed by Arm to define communication protocols between functional blocks (IP cores) in system-on-chip (SoC) designs. By providing a consistent, modular interface framework, AMBA significantly enhances IP reuse, accelerates integration, and supports right-first-time development — especially critical for complex multiprocessor systems incorporating numerous processors, memory controllers, and peripherals. As a cornerstone of modern SoC design, AMBA is extensively deployed in power and performance-sensitive applications, including smartphones, tablets, and embedded devices.
+
+Among the AMBA protocol family, the Advanced High-performance Bus (AHB) targets high-speed, synthesizable system designs. AHB supports multiple bus masters, pipelined transfers, and high-bandwidth operation, making it suitable for connecting high-throughput components such as CPUs, DMA controllers, and high-seed memories. A streamlined variant, AHB-Lite, simplifies the full AHB specification — most notably by assuming a single bus master — thereby reducing logic complexity and verification effort. In an AHB-Lite transaction, the master initiates read or write operations by driving address, control, and data (for writes) signals onto the bus. Slaves respond with data (for reads), along with handshake signals: \NewTexttt{HREADY} (indicating transfer completion) and \NewTexttt{HRESP} (signaling success or error conditions). Slave selection is managed by the address decoder, which asserts the corresponding \NewTexttt{HSELx} signal for the targeted slave during each access, ensuring only one slave responds per cycle.
+
+\subsection{Addressing}
+\paragraph{Memory Mapping.} The ARMv6-M architecture (used in Cortex-M0 and M0+ processors) defines a flat, linear 32-bit address space, yielding a total of 4 GiB of addressable locations. This space is logically partitioned into predefined regions — not all of which correspond to physical memory — and the layout is standardized across all ARMv6-M implementations to ensure software portability. The canonical ARMv6-M memory map is divided as follows:
+
+\begin{table}[!h]
+    \centering
+    \begin{tabular}{
+        >{\raggedright\arraybackslash}p{0.20\textwidth}
+        >{\raggedright\arraybackslash}p{0.20\textwidth}
+        >{\raggedright\arraybackslash}p{0.50\textwidth}
+        }
+        \toprule
+        \textbf{Address Range}                              & \textbf{Region Name}         & \textbf{Description}                                                                    \\
+        \midrule
+        \NewTexttt{0x0000\_0000} - \NewTexttt{0x1FFF\_FFFF} & Code (Alias)                 & Typically maps to Flash (via aliasing mechanisms); supports execution-in-place (XIP).   \\
+        \NewTexttt{0x2000\_0000} - \NewTexttt{0x3FFF\_FFFF} & SRAM                         & On-chip RAM (often tightly coupled memory, TCP-like behavior).                          \\
+        \NewTexttt{0x4000\_0000} - \NewTexttt{0x5FFF\_FFFF} & Peripheral                   & Memory-mapped I/O space for system and external peripherals (e.g., UART, GPIO, timers). \\
+        \NewTexttt{0x6000\_0000} - \NewTexttt{0x9FFF\_FFFF} & External RAM                 & Optional external memory (e.g., SDRAM, SRAM via FSMC/EBI).                              \\
+        \NewTexttt{0xA000\_0000} - \NewTexttt{0xDFFF\_FFFF} & External Devices             & Memory-mapped external peripherals (e.g., LCD controllers, Ethernet MACs).              \\
+        \NewTexttt{0xE000\_0000} - \NewTexttt{0xFFFF\_FFFF} & Private Peripheral Bus (PPB) & System control space: NVIC, SysTick, MPU, debug components (e.g., DWT, ITM, ROM table). \\
+        \bottomrule
+    \end{tabular}
+    \caption{Memory map of a typical ARM Cortex-M-based microcontroller.}
+\end{table}
+
+Crucially, all I/O in ARMv6-M is memory-mapped — there is no dedicated I/O address space or I/O instructions. Peripherals — both general-purpose (e.g., GPIO at \NewTexttt{0x4002\_0000}) and system-critical (e.g., NVIC at \NewTexttt{0xE000\_E100}) — occupy fixed or configurable regions within the unified 32-bit address map.
+
+Though all peripherals use the same address space, they are not treated like normal memory. The architecture assigns memory type attributes per region, enforced by the optional Memory Protection Unit (MPU) or hardwired in the bus matrix. These attributes ensure that accesses to peripheral registers have deterministic timing and side effects, preventing compiler or hardware optimizations (e.g., reordering, caching, write combining) that would break device driver logic. Additionally, while ARMv6-M is byte-addressable, not all peripheral support arbitrary byte or half-word accesses — even if the address is aligned. Access width must match the register definition; mismatched accesses may cause bus faults or undefined behavior.
+
+\paragraph{Isolated (Port-Mapped) I/O.} In contrast, isolated I/O, also known as port-mapped I/O (PMIO), uses a separate address space dedicated exclusively to I/O devices — distinct from the main memory address space. Key features:
+
+\begin{itemize}
+    \item A dedicated I/O address space, typically much smaller (e.g., 64 KiB).
+    \item Specialized instructions for I/O access, e.g., \NewTexttt{IN} and \NewTexttt{OUT} on x86, or \NewTexttt{IN}/\NewTexttt{OUT} mnemonics on 8051 or Z80.
+    \item The CPU's memory-access instructions (e.g., \NewTexttt{LDR}, \NewTexttt{STR}) cannot access I/O ports; only I/O instructions can.
+    \item Physical separation: often implemented via a distinct set of control signals (e.g., \NewTexttt{/IOR}, \NewTexttt{/IOW} on ISA bus vs. \NewTexttt{/MEMR}, \NewTexttt{/MEMW}).
+\end{itemize}
+
+Advantages for isolated I/O include a larger effective memory space (since I/O doesn't consume main memory addresses, the full physical memory address space remains available for RAM/ROM), clear separation of concerns (I/O operations are syntactically and semantically distinct, reducing accidental accesses), and simpler hardware decoding (I/O port decode logic can be simpler and faster than full 32-bit memory decoding). However, it also brings drawbacks, since it requires additional instructions and CPU microarchitecture support, cannot use general-purpose addressing modes for I/O without extra overhead, inline assembly is often needed, and is harder to virtualize or remap.
+
+\subsection{Peripherals.} In embedded systems, peripheral controllers like GPIO (General Purpose Input/Output), UART (Universal Asynchronous Receiver-Transmitter), and SPI (Serial Peripheral Interface) are typically accessed via memory-mapped interfaces. To interact with these peripherals, software reads from and writes to specific registers located at fixed address offsets. For example, the Xilinx UARTLite has a Receive FIFO at offset \NewTexttt{0h}, a Transmit FIFO at \NewTexttt{04h}, a Status Register at \NewTexttt{08h}, and a Control Register at \NewTexttt{0Ch}.
+
+\paragraph{C-Level Memory Access.} We can interact with these hardware registers using C pointers. We can define \NewTexttt{peek} (read) and \NewTexttt{poke} (write) functions to demonstrate this mechanism. The pointer is dereferenced to access the specific memory location assigned to the device.
+
+\begin{ccode}
+// Reading from a register
+int peek(char *location) {
+    return *location;  // dereference location pointer to read
+}
+
+// Writing to a register
+void poke(char *location, char newval) {
+    (*location) = newval;  // Write newval to address 'location'
+}
+
+// Example usage
+#define DEV1 0x1000
+dev_status = peek(DEV1);  // Read status
+poke(DEV1, 8);            // Write 8 to the device
+\end{ccode}
+
+When writing this type of low-level code, specific keywords ensure the compiler handles variables correctly:
+
+\begin{itemize}
+    \item \NewTexttt{const}: Makes a variable or pointer parameter unmodifiable.
+    \item \NewTexttt{static}: Preserves a variable's value after its scope ends and prevents it from being placed on the stack.
+    \item \NewTexttt{volatile}: This is critical for embedded I/O. It tells the compiler that the variable (or register) can change in the background (e.g., by hardware) without the software's explicit action. It prevents the compiler from optimizing away reads/writes to that address.
+\end{itemize}
+
+\paragraph{Data Transmission Protocols.} Data transmission between devices relies on knowing when data is valid. This is handled in two main ways:
+
+\begin{enumerate}
+    \item \textit{Synchronous Communication}: Uses a separate clock signal. The receiver samples data on a specific clock edge (e.g., rising edge). This is common in parallel communication or protocols like SPI\@.
+    \item \textit{Asynchronous Communication}: Does not use a clock signal. Instead, the receiver infers bit times based on a fixed baud rate and specific framing delays relative to a reference event (like a start bit).
+\end{enumerate}
+
+UART (Universal Asynchronous Receiver-Transmitter) is the standard implementation for asynchronous serial communication. Since there is no clock, it relies on strict framing to signal the start and end of data. The line is held high during the Idle state. The transmission frame consists of:
+
+\begin{itemize}
+    \item \textit{Start Bit}: The transmitter pulls the line low to signal the beginning of a message.
+    \item \textit{Data Bits}: Usually 8 bits are sent, starting with the LSB\@.
+    \item \textit{Parity Bits}: Used for error detection. In Even Parity, the bit is set to make the total number of 1s even. In Odd Parity, it makes the total count odd. This can detect an odd number of bit errors but fails if an even number of bits are flipped.
+    \item \textit{Stop Bit}: The line is pulled high to end the frame and return to the Idle state.
+\end{itemize}
+
+There are two primary models for managing peripheral data flow:
+
+\begin{enumerate}
+    \item \textit{Polling (Busy Wait)}: In polling, the processor continually interrogates the peripheral's status register to check if it is ready to send or receive data. While simple to implement, this wastes CPU cycles because the processor is fully occupied "waiting" for the hardware. The following code demonstrates a blocking send routine for the UARTLite. It sits in a \NewTexttt{while} loop checking the "Transmit FIFO Full" bit in the status register before writing a byte.
+    
+    \begin{ccode}
+        void XUartLite\_SendByte(int *BaseAddress, char Data) {
+    // Busy wait: keep looping while the Transmit FIFO is full
+    while (XUartLite\_IsTransmitFull(BaseAddress));
+
+    // Write data to the TX FIFO register
+    XUartLite\_WriteReg(BaseAddress, XUL\_TX\_FIFO\_OFFSET, Data);
+}
+    \end{ccode}
+
+    \item \textit{Interrupts}: Interrupts are asynchronous events that trigger the execution of a specific procedure called an interrupt handler. These allow the CPU to only be active regarding the peripheral when a status change actually occurs, allowing it to do other work otherwise, but they introduce complexity in debugging and predictability. The flow is as follows:
+    
+    \begin{enumerate}
+        \item The peripheral asserts an interrupt signal.
+        \item The processor saves its current context (PC, registers) and jumps to the interrupt handler.
+        \item The processor acknowledges the interrupt (often by toggling an acknowledgment bit in the interrupt controller or the peripheral).
+        \item After handling the event, the processor restores the context and resumes the main program.
+    \end{enumerate}
+    
+    In Xilinx designs, interrupts are managed by an AXI Interrupt Controller. To enable interrupts on a peripheral like the AXI GPIO, you must set the Global Interrupt Enable (GIE) bit and the Interrupt Enable Register (IER) for the specific channel.
+\end{enumerate}
