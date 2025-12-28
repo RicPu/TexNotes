@@ -1,0 +1,105 @@
+\section{Exploiting ILP}
+
+\subsection{Instruction-Level Parallelism (ILP)}
+Pipelining serves as the fundamental technique for ILP by overlapping the execution of multiple instructions. To further maximize ILP, systems can utilize deeper pipelines, which decompose instructions into more numerous, smaller stages. This reduction in work per stage allows for a higher clock frequency (shorter clock cycles). However, as pipeline depth increases, the overhead of hazards and the complexity of hardware logic also scale.
+
+\paragraph{Multiple Issue.} To push performance beyond the theoretical limit of a single-issue pipeline, where the Cycles Per Instruction (CPI) is at best 1, architectures employ Multiple Issue techniques. In these systems, the Instructions Per Cycle (IPC) becomes the primary metric of throughput.
+
+\begin{itemize}
+    \item \textit{Static Multiple Issue}: In a static framework, the responsibility of managing parallelism shifts to the compiler. The compiler groups instructions into issue packets, which are perceived by the hardware as a single "very long instruction" (VLIW).
+    
+    \begin{itemize}
+        \item \textit{Packet Construction}: The compiler packages instructions based on available pipeline resources (issue slots).
+        \item \textit{Hazard Management}: The compiler is responsible for detecting and resolving hazards. It must ensure that no dependencies exist within a single packet and manage dependencies between successive packets according to the specific ISA rules.
+        \item \textit{Resource Alignment}: If the compiler cannot find enough independent instructions to fill a packet, it must pad the remaining slots with \NewTexttt{nop} (no-operation) instructions.
+    \end{itemize}
+
+    A common implementation is the MIPS Static Dual-Issue processor, which fetches and executes a "packet" of two instructions every clock cycle. To simplify the hardware decoding logic, these issue packets are strictly formatted. They must be 64-bit aligned, containing two 32-bit instructions in a specific order:
+
+    \begin{enumerate}
+        \item \textit{Slot 1}: An ALU or Branch instruction.
+        \item \textit{Slot 2}: A Load or Store instruction.
+    \end{enumerate}
+
+    If the compiler cannot find a pair of instructions that meet these criteria and lack dependencies, it must pad the unused slot with a \NewTexttt{nop}. This ensures the hardware always receives a predictable instruction pair.
+
+    While dual-issue increases potential throughput, it introduces more restrictive timing constraints for data hazards, requiring more aggressive compiler scheduling:
+
+    \begin{itemize}
+        \item \textit{EX Data Hazards}: In a single-issue pipeline, forwarding allows an ALU result to be used immediately by next instruction. However, in a dual-issue packet, an ALU result produced in Slot 1 cannot be used by a Load/Store in Slot 2 of the same packet. The instructions are executing in the same stage simultaneously, so the result has not yet been generated when the second instruction requires its operands.
+        \item \textit{Load-Use Hazards}: The "use latency" for a load instruction remains one cycle, but the impact is doubled. Because the processor issues two instructions per cycle, a one-cycle delay now stalls two potential instruction slots instead of one.
+    \end{itemize}
+
+    To maintain efficiency, the compiler must look further ahead in the code to find independent instructions to fill these gaps, a process known as Static Instruction Scheduling.
+
+    \item \textit{Dynamic Multiple Issue}: Superscalar processors represent a shift in responsibility from the compiler to the hardware. In this architecture, the CPU dynamically decides whether to issue zero, one, or multiple instructions during each clock cycle. The primary objective is to maximize throughput by avoiding structural and data hazards in real-time. While a compiler can still assist by reordering instructions to be "hardware-friendly", it is no longer strictly required for functional correctness. The CPU hardware ensures that the final code semantics remain identical to a sequential execution, regardless of how the instructions were shuffled internally.
+    
+    To mitigate stalls, superscalar units often employ Dynamic Pipeline Scheduling. This allows the CPU to execute instructions out-of-order as soon as their operands are available. However, to maintain architectural integrity, the system must commit results to registers in-order. This ensures that if an interrupt or exception occurs, the machine state is inconsistent and predictable.
+\end{itemize}
+
+Loop unrolling is a code transformation technique that reduces loop overhead by replicating the loop body multiple times and decreasing the total number of iterations. It is a key method for exposing Instruction-Level Parallelism in both static and dynamic multiple-issue systems. By executing multiple iterations of the original loop within a single unrolled iteration, the processor significantly reduces the frequency of administrative instructions, which means fewer increments of the loop counter and fewer conditional branches are executed. In deep pipelines, every branch is a potential stall or misprediction risk; unrolling reduces the total number of branches, keeping the pipeline streaming longer.
+
+\paragraph{Speculation.} Speculation is a sophisticated technique used in both static and dynamic systems to preemptively execute instructions before the processor is certain they are required. This is particularly effective for overcoming the bottlenecks of branch delays and long-latency load operations. The process involves a "guess-check-recover" cycle: the system guesses the outcome of a control or data flow decision, executes the operation based on that guess, and then verifies the result. If the guess was correct, the operation is committed; if incorrect, the system performs a roll-back to restore the previous architectural state.
+
+\begin{itemize}
+    \item \textit{Compiler Speculation}: The compiler may reorder instructions, such as moving a \NewTexttt{load} operation before a preceding \NewTexttt{branch}. To handle potential errors (like a memory protection fault on a speculative load), the compiler integrates "fix-up" code to recover gracefully.
+    \item \textit{Hardware Speculation}: The processor uses look-ahead buffers to execute instructions out-of-order. The results are stored in temporary buffers (such as reorder buffers) and are only written to the permanent architectural state once the speculation is confirmed as correct. If the speculation fails, these buffers are simply flushed.
+\end{itemize}
+
+\paragraph{Conclusions.} While compilers are powerful, they are limited by the information available at "compile-time". Hardware scheduling is superior for several reasons:
+
+\begin{itemize}
+    \item \textit{Unpredictable Stalls}: Many stalls, such as cache misses, are non-deterministic. A compiler cannot know exactly when a data request will miss the cache, but the CPU can detect the miss and immediately switch to other independent instructions.
+    \item \textit{Dynamic Branch Outcomes}: The specific path a program takes often depends on runtime data. Hardware can use dynamic branch predictors to speculatively execute paths that a static compiler cannot definitively identify.
+    \item \textit{Microarchitectural Portability}: Different implementations of the same Instruction Set Architecture (ISA) may have varying pipeline depths, latencies, and functional units. Hardware scheduling allows the same binary code to run efficiently across different CPU generations without needing to be recompiled for every specific hardware hazard.
+\end{itemize}
+
+Despite the sophistication of multiple-issue and speculation, several "walls" prevent us from achieving infinite parallelism. Programs possess inherent dependencies that create a ceiling for Instruction-Level Parallelism.
+
+\begin{itemize}
+    \item \textit{Data and Resource Dependencies}: Real dependencies, such as a calculation requiring the result of the immediately preceding one, create chains that cannot be parallelized.
+    \item \textit{Pointer Aliasing}: This is a significant hurdle in languages like C. If the compiler of hardware cannot be certain whether two different pointers refer to the same memory address, it must assume a dependency exists, which prevents reordering load/store operations.
+    \item \textit{Limited Windows Size}: A CPU can only "look ahead" at a certain number of instructions to find parallelism. Increasing this window requires massive amounts of power and silicon area, leading to diminishing returns.
+    \item \textit{Memory Bottlenecks}: Modern CPUs are significantly faster than the memory systems that feed them. Limited memory bandwidth and high latency make it difficult to keep deep, wide pipelines consistently full of useful instructions.
+\end{itemize}
+
+Speculation remains the most effective tool for breaking through these limits, but it must be executed with high accuracy. If speculation fails too often, the energy and cycles spent on "wrong-path" execution actually decrease performance below that of a simpler, non-speculative processor.
+
+\subsection{Single Instruction, Multiple Data (SIMD)}
+SIMD (Single Instruction, Multiple Data is an architecture category designed to exploit Data-Level Parallelism (DLP)). By applying a single operation to an entire vector of data simultaneously, SIMD significantly accelerates computationally intensive tasks like digital signal processing (DSP), audio/video encoding, and deep learning inference.
+
+To understand SIMD, it is helpful to contrast it with the traditional processing model:
+
+\begin{itemize}
+    \item \textit{SISD}: This is the conventional scalar processing model (e.g., standard MIPS or ARM code). The CPU executes one instruction to process exactly one data item at a time. To add two arrays of 8 elements, a SISD processor must execute 8 separate addition instructions in a loop.
+    \item \textit{SIMD}: Also known as Vector Parallelism, this model allows one instruction to operate on a "pack" of data elements (a vector). In the same example of adding arrays, a SIMD processor with an 8-lane vector width can perform all 8 additions in a single clock cycle using one instruction.
+\end{itemize}
+
+\paragraph{ARM NEON: Advanced SIMD.} NEON is the ARM implementation of advanced SIMD technology. It functions as a dedicated accelerator integrated into the processor, specifically designed to handle the high-throughput requirements of modern multimedia and AI workloads. There are three primary ways to utilize NEON in an embedded system:
+
+\begin{enumerate}
+    \item \textit{Auto-vectorization}: The compiler automatically analyzes standard C/C++ loops and converts them into NEON instructions, which is an operation that requires specific compiler flags (e.g., \NewTexttt{-03 -mfpu=neon}).
+    \item \textit{NEON Intrinsics}: These are special C/C++ function calls that map directly to NEON instructions. They provide low-level control over the hardware while allowing the compiler to handle register allocation and instruction scheduling.
+    \item \textit{Hand-coded Assembly}: For maximum performance, developers can write raw NEON assembly. This is typically reserved for critical "hot spots" in a program where the compiler's output is not sufficiently optimized.
+\end{enumerate}
+
+NEON utilizes a dedicated register file that is distinct from the general-purpose ARM registers (\NewTexttt{r0 - r15}). This file is 256 bytes large and offers a dual-view architecture, allowing the hardware to treat the same physical storage in two different ways:
+
+\begin{itemize}
+    \item \textit{D Registers (Double-word)}: 32-bit registers, each 64 bits wide (\NewTexttt{D0 - D31}).
+    \item \textit{Q Registers (Quad-word)}: 16-bit registers, each 128 bits wide (\NewTexttt{Q0 - Q15}).
+\end{itemize}
+
+The registers are aliased, meaning \NewTexttt{Q0} is physically composed of \NewTexttt{D0} and \NewTexttt{D1}, \NewTexttt{Q1} is composed of \NewTexttt{D2} and \NewTexttt{D3}, and so on. This flexibility allows the programmer to choose the vector length that best fits the data type and algorithm. Each NEON register is viewed as a vector of elements of the same type, known as lanes. The number of lanes depends on the data size:
+
+\begin{itemize}
+    \item A 128-bit Q register can hold:
+    \begin{itemize}
+        \item 16 elements of 8-bit data (e.g., pixels).
+        \item 8 elements of 16-bit data (e.g., audio samples).
+        \item 4 elements of 32-bit data (e.g., floating-point values).
+        \item 2 elements of 64-bit data.
+    \end{itemize}
+\end{itemize}
+
+On many ARM architectures, the NEON register file is shared with the VPF (Vector Floating Point) unit. While they share registers, they serve different purposes: the VFP is a fully IEEE-754 compliant floating-point coprocessor for high-precision scalar math, whereas NEON is a high-speed, parallel engine for throughput-oriented vector math.
