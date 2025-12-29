@@ -1,4 +1,4 @@
-\section{Exploiting ILP}
+\section{Parallelism}
 
 \subsection{Instruction-Level Parallelism (ILP)}
 Pipelining serves as the fundamental technique for ILP by overlapping the execution of multiple instructions. To further maximize ILP, systems can utilize deeper pipelines, which decompose instructions into more numerous, smaller stages. This reduction in work per stage allows for a higher clock frequency (shorter clock cycles). However, as pipeline depth increases, the overhead of hazards and the complexity of hardware logic also scale.
@@ -7,34 +7,34 @@ Pipelining serves as the fundamental technique for ILP by overlapping the execut
 
 \begin{itemize}
     \item \textit{Static Multiple Issue}: In a static framework, the responsibility of managing parallelism shifts to the compiler. The compiler groups instructions into issue packets, which are perceived by the hardware as a single "very long instruction" (VLIW).
-    
-    \begin{itemize}
-        \item \textit{Packet Construction}: The compiler packages instructions based on available pipeline resources (issue slots).
-        \item \textit{Hazard Management}: The compiler is responsible for detecting and resolving hazards. It must ensure that no dependencies exist within a single packet and manage dependencies between successive packets according to the specific ISA rules.
-        \item \textit{Resource Alignment}: If the compiler cannot find enough independent instructions to fill a packet, it must pad the remaining slots with \NewTexttt{nop} (no-operation) instructions.
-    \end{itemize}
 
-    A common implementation is the MIPS Static Dual-Issue processor, which fetches and executes a "packet" of two instructions every clock cycle. To simplify the hardware decoding logic, these issue packets are strictly formatted. They must be 64-bit aligned, containing two 32-bit instructions in a specific order:
+          \begin{itemize}
+              \item \textit{Packet Construction}: The compiler packages instructions based on available pipeline resources (issue slots).
+              \item \textit{Hazard Management}: The compiler is responsible for detecting and resolving hazards. It must ensure that no dependencies exist within a single packet and manage dependencies between successive packets according to the specific ISA rules.
+              \item \textit{Resource Alignment}: If the compiler cannot find enough independent instructions to fill a packet, it must pad the remaining slots with \NewTexttt{nop} (no-operation) instructions.
+          \end{itemize}
 
-    \begin{enumerate}
-        \item \textit{Slot 1}: An ALU or Branch instruction.
-        \item \textit{Slot 2}: A Load or Store instruction.
-    \end{enumerate}
+          A common implementation is the MIPS Static Dual-Issue processor, which fetches and executes a "packet" of two instructions every clock cycle. To simplify the hardware decoding logic, these issue packets are strictly formatted. They must be 64-bit aligned, containing two 32-bit instructions in a specific order:
 
-    If the compiler cannot find a pair of instructions that meet these criteria and lack dependencies, it must pad the unused slot with a \NewTexttt{nop}. This ensures the hardware always receives a predictable instruction pair.
+          \begin{enumerate}
+              \item \textit{Slot 1}: An ALU or Branch instruction.
+              \item \textit{Slot 2}: A Load or Store instruction.
+          \end{enumerate}
 
-    While dual-issue increases potential throughput, it introduces more restrictive timing constraints for data hazards, requiring more aggressive compiler scheduling:
+          If the compiler cannot find a pair of instructions that meet these criteria and lack dependencies, it must pad the unused slot with a \NewTexttt{nop}. This ensures the hardware always receives a predictable instruction pair.
 
-    \begin{itemize}
-        \item \textit{EX Data Hazards}: In a single-issue pipeline, forwarding allows an ALU result to be used immediately by next instruction. However, in a dual-issue packet, an ALU result produced in Slot 1 cannot be used by a Load/Store in Slot 2 of the same packet. The instructions are executing in the same stage simultaneously, so the result has not yet been generated when the second instruction requires its operands.
-        \item \textit{Load-Use Hazards}: The "use latency" for a load instruction remains one cycle, but the impact is doubled. Because the processor issues two instructions per cycle, a one-cycle delay now stalls two potential instruction slots instead of one.
-    \end{itemize}
+          While dual-issue increases potential throughput, it introduces more restrictive timing constraints for data hazards, requiring more aggressive compiler scheduling:
 
-    To maintain efficiency, the compiler must look further ahead in the code to find independent instructions to fill these gaps, a process known as Static Instruction Scheduling.
+          \begin{itemize}
+              \item \textit{EX Data Hazards}: In a single-issue pipeline, forwarding allows an ALU result to be used immediately by next instruction. However, in a dual-issue packet, an ALU result produced in Slot 1 cannot be used by a Load/Store in Slot 2 of the same packet. The instructions are executing in the same stage simultaneously, so the result has not yet been generated when the second instruction requires its operands.
+              \item \textit{Load-Use Hazards}: The "use latency" for a load instruction remains one cycle, but the impact is doubled. Because the processor issues two instructions per cycle, a one-cycle delay now stalls two potential instruction slots instead of one.
+          \end{itemize}
+
+          To maintain efficiency, the compiler must look further ahead in the code to find independent instructions to fill these gaps, a process known as Static Instruction Scheduling.
 
     \item \textit{Dynamic Multiple Issue}: Superscalar processors represent a shift in responsibility from the compiler to the hardware. In this architecture, the CPU dynamically decides whether to issue zero, one, or multiple instructions during each clock cycle. The primary objective is to maximize throughput by avoiding structural and data hazards in real-time. While a compiler can still assist by reordering instructions to be "hardware-friendly", it is no longer strictly required for functional correctness. The CPU hardware ensures that the final code semantics remain identical to a sequential execution, regardless of how the instructions were shuffled internally.
-    
-    To mitigate stalls, superscalar units often employ Dynamic Pipeline Scheduling. This allows the CPU to execute instructions out-of-order as soon as their operands are available. However, to maintain architectural integrity, the system must commit results to registers in-order. This ensures that if an interrupt or exception occurs, the machine state is inconsistent and predictable.
+
+          To mitigate stalls, superscalar units often employ Dynamic Pipeline Scheduling. This allows the CPU to execute instructions out-of-order as soon as their operands are available. However, to maintain architectural integrity, the system must commit results to registers in-order. This ensures that if an interrupt or exception occurs, the machine state is inconsistent and predictable.
 \end{itemize}
 
 Loop unrolling is a code transformation technique that reduces loop overhead by replicating the loop body multiple times and decreasing the total number of iterations. It is a key method for exposing Instruction-Level Parallelism in both static and dynamic multiple-issue systems. By executing multiple iterations of the original loop within a single unrolled iteration, the processor significantly reduces the frequency of administrative instructions, which means fewer increments of the loop counter and fewer conditional branches are executed. In deep pipelines, every branch is a potential stall or misprediction risk; unrolling reduces the total number of branches, keeping the pipeline streaming longer.
@@ -94,12 +94,120 @@ The registers are aliased, meaning \NewTexttt{Q0} is physically composed of \New
 
 \begin{itemize}
     \item A 128-bit Q register can hold:
-    \begin{itemize}
-        \item 16 elements of 8-bit data (e.g., pixels).
-        \item 8 elements of 16-bit data (e.g., audio samples).
-        \item 4 elements of 32-bit data (e.g., floating-point values).
-        \item 2 elements of 64-bit data.
-    \end{itemize}
+          \begin{itemize}
+              \item 16 elements of 8-bit data (e.g., pixels).
+              \item 8 elements of 16-bit data (e.g., audio samples).
+              \item 4 elements of 32-bit data (e.g., floating-point values).
+              \item 2 elements of 64-bit data.
+          \end{itemize}
 \end{itemize}
 
 On many ARM architectures, the NEON register file is shared with the VPF (Vector Floating Point) unit. While they share registers, they serve different purposes: the VFP is a fully IEEE-754 compliant floating-point coprocessor for high-precision scalar math, whereas NEON is a high-speed, parallel engine for throughput-oriented vector math.
+
+\subsection{Parallel Processors}
+The fundamental objective of parallel processing is the interconnection of multiple processing elements to achieve enhanced computational performance. This architecture is generally categorized into three operational scales: task-level parallelism, which prioritizes high throughput for independent workloads; parallel processing programs, where a single application is distributed across multiple processors; and multicore microprocessors, which integrate several processing units, or cores, onto a single physical substrate.
+
+\paragraph{Power Dynamics and Efficiency.} Power efficiency remains a primary constraint in the design of advanced embedded systems. The dynamic power consumption of a circuit is governed by the switching power equation:
+
+\begin{equation}
+    P_\text{switch} = \alpha \cdot C \cdot V^2_\text{dd} \cdot f
+\end{equation}
+
+In this context, \(\alpha\) represents the activity factor, \(C\) the capacitance, \(V_\text{dd}\) the supply voltage, and \(f\) the operating frequency. To optimize for power, designers often reduce the number of pipeline stages, which subsequently lowers the total flip-flop count. Furthermore, the synthesis process itself impacts the energy profile; enforcing higher frequency constraints during logic synthesis typically results in more power-hungry netlists. Multicore architectures mitigate some of these issues by allowing for core specialization, where specific cores are optimized for distinct tasks rather than relying on a single, high-frequency general-purpose unit.
+
+The primary bottleneck in parallel computing is the complexity of the software rather than the hardware. To justify the transition from a uniprocessor to a multicore system, the software must demonstrate significant performance improvements; otherwise, the simplicity of a faster uniprocessor remains preferable. These challenges are primarily rooted in three areas:
+
+\begin{enumerate}
+    \item \textit{Partitioning}: Dividing the problem into discrete, parallelizable tasks.
+    \item \textit{Coordination}: Managing the synchronization between concurrent threads.
+    \item \textit{Communication Overhead}: The latency and bandwidth costs associated with data exchange between cores.
+\end{enumerate}
+
+\paragraph{Amdahl's Law.} Amdahl's Law provides a theoretical framework for predicting the maximum speedup of a system when only a portion of it is improved or parallelized. It establishes that the overall performance gain is strictly limited by the sequential fraction of the program, which cannot benefit from additional processors. The fundamental relationship for speedup is defined by the fraction of the code that is parallelizable (\(P\)). In an ideal scenario with infinite processors, the maximum speedup is constrained by the remaining serial fraction \((1 - P)\):
+
+\begin{equation}
+    \text{Speedup}_\text{max} = \frac{1}{1 - P}
+\end{equation}
+
+When considering a finite number of processors (\(N\)), the execution time is the sum of the time spent on the serial portion (\(S\)) and the time spent on the parallel portion (\(P\)) distributed across those processors. This is modeled by the equation:
+
+\begin{equation}
+    \text{Speedup} = \frac{1}{S + \frac{P}{N}}
+\end{equation}
+
+In this mode, \(S\) represents the serial fraction, \(P\) is the parallel fraction (where \(S + P = 1\)), and \(N\) is the number of processing elements. As \(N\) increases, the term \(\frac{P}{N}\) diminishes, leaving the serial fraction \(S\) as the ultimate bottleneck.
+
+The effectiveness of parallelization is often evaluated through two distinct lenses:
+
+\begin{itemize}
+    \item \textit{Strong Scaling}: This approach keeps the total problem size fixes while increasing the number of processors. The primary goal is to reduce the "time to solution". Strong scaling is heavily governed by Amdahl's Law, as the serial portion becomes increasingly dominant as the parallel work per processor shrinks.
+    \item \textit{Weak Scaling}: In this perspective, the problem size grows proportionally with the number of processors, maintaining a constant workload per processor. The objective is to solve larger, more complex problems in the same amount of time rather than solving a small problem faster. Weak scaling is often modeled by Gustafson's Law, which suggests that parallel performance can scale more linearly if the workload is allowed to expand.
+\end{itemize}
+
+\subsubsection{Multithreading and Shared Memory Architectures}
+Multithreading is a technique that enables the parallel execution of multiple threads by replicating hardware resources, such as registers and Program Counters (PCs), to allow for rapid context switching. Unlike traditional process switching, which involves heavy OS overhead, hardware multithreading minimizes latency by maintaining thread states in the processor pipeline. The efficiency of multithreading depends on the frequency and conditions under which the processor switched execution contexts:
+
+\begin{itemize}
+    \item \textit{Fine-grained Multithreading}: The processor switches between threads after every clock cycle, interleaving instructions in a round-robin fashion. If one thread stalls (e.g., due to a dependency), the pipeline remains utilized by executing instructions from other threads. While this maximizes throughput, it can slow down the execution of an individual prime thread.
+    \item \textit{Coarse-grained Multithreading}: Context switching only occurs during significant stalls, such as an L2 cache miss. This approach simplifies hardware design as it does not require cycle-by-cycle switching; however, it is less effective at masking short-term stalls like data hazards or functional unit contention.
+    \item \textit{Simultaneous Multithreading}: Employed in multiple-issue, dynamically scheduled processors, SMT allows instructions from different threads to execute concurrently within the same clock cycle. By leveraging the superscalar architecture, SMT utilizes functional units that would otherwise remain idle. Within individual threads, dependencies are managed through dynamic scheduling and register renaming.
+\end{itemize}
+
+In an SMP system, the hardware provides a single, unified physical address space accessible by all processors. Communication between threads is managed by synchronizing shared variables, typically through the use of software locks. The performance of these systems is often categorized by the memory latenxy:
+
+\begin{itemize}
+    \item \textit{Uniform Memory Access (UMA)}: All processors share the same memory latency when accessing any part of the physical memory.
+    \item \textit{Non-Uniform Memory Access (NUMA)}: Memory is physically distributed; a processor can access its local memory faster than remote memory blocks assigned to other processors.
+\end{itemize}
+
+When two or more processors share a memory region, hardware-level support for atomic operations is required to prevent race conditions. An atomic read-modify-write operation ensures that no other processor can access or modify a specific memory location between the initial read and the final write. This atomicity is typically implemented via:
+
+\begin{itemize}
+    \item A single atomic instruction (e.g., Test-and-Set).
+    \item An atomic pair of instructions (e.g., Load-Linked / Store-Conditional).
+    \item Hardware-level mutexes or semaphores managed by the memory controller.
+\end{itemize}
+
+\paragraph{Accelerator Control and Execution Models.} Effective accelerator integration requires managing the flow of control between the CPU and specialized hardware. This is primarily handled through two execution models: single-threaded (blocking) and multithreaded (non-blocking) control. In a single-threaded environment, the CPU initiates an accelerator task and enters a stall or wait state until the accelerator completes its operation. This sequential execution creates significant idle time for the CPU\@. Conversely, a multithreaded model employs a split-join architecture. After the CPU triggers the accelerator (the "split"), it continues executing independent tasks while the accelerator runs in parallel. The execution flows then "join" once both the CPU and accelerator have reached their respective synchronization points.
+
+\paragraph{Partitioning and Data Distribution.} Partitioning is the process of decomposing a problem into smaller, parallel tasks. This decomposition generally follows two methodologies:
+
+\begin{itemize}
+    \item \textit{Domain Decomposition}: The problem data set is divided into discrete chunks, and each task performs similar operations on different pieces of data.
+    \item \textit{Functional Decomposition}: The problem instruction set is divided. In this model, different tasks perform different operations, often arranged in a pipeline where data flows from one task to the next.
+\end{itemize}
+
+For effective hardware mapping, data is distributed using 1D or 2D patterns. Common distribution strategies include Block, where contiguous data chunks are assigned to a processor, and Cyclic, where data elements are interleaved across processors to ensure a better load balance.
+
+\paragraph{Scheduling, Mapping and Benchmarking.} Scheduling involves the assignment of tasks to specific processors while satisfying several constraints. To optimize execution time, designers must account for the task graph, which defines the order of execution, and inter-task dependencies. Furthermore, communication-related overhead, such as the time data spends on the bus or network, must be factored into the total execution cost. For example, a task transfer might consume specific time units on the system bus, delaying the start of dependent tasks on remote processors.
+
+To evaluate these systems, several standardized benchmark suites are utilized:
+
+\begin{itemize}
+    \item \textit{Linpack}: Measures matrix linear algebra performance.
+    \item \textit{SPECrate}: Measures the throughput of parallel runs of SPEC CPU programs.
+    \item \textit{SPLASH/PARSEC}: Suites focused on shared-memory multithreaded applications.
+    \item \textit{NAS}: Kernels focused on computational fluid dynamics.
+\end{itemize}
+
+\subsubsection{The Roofline Model}
+The Roofline model is a visual framework used to determine the attainable performance of a kernel on a specific architecture. It relates floating-point performance to Arithmetic Intensity, which is defined as the ratio of floating-point operations (FLOPs) to the total bytes of memory accessed:
+
+\begin{equation}
+    \text{Arithmetic Intensity} = \frac{\text{FLOPs}}{\text{Bytes}}
+\end{equation}
+
+The attainable performance is constrained by two hardware limits: the Peak Floating-Point Performance and the Peak Memory Bandwidth. The formula for attainable GFLOPs/sec is:
+
+\begin{equation}
+    \text{Att. GFLOPs/sec} = \min (\text{Peak Memory BW} \times \text{Arithmetic Intensity, Peak FP Performance})
+\end{equation}
+
+\paragraph{Optimization Regions.} A kernel's position on the Roofline diagram dictates the necessary optimization strategy:
+
+\begin{enumerate}
+    \item \textit{Memory-Bandwidth Limited}: When a kernel has low arithmetic intensity, performance is limited by how fast data can be moved from memory. Improvements here require optimizing memory usage, such as using software prefetching or ensuring memory affinity to avoid non-local accesses.
+    \item \textit{Computation Limited}: When arithmetic intensity is high, the kernel is limited by the processor's raw speed. Performance can be improved by balancing adds and multiplies, increasing instruction-level parallelism, or utilizing SIMD instructions.
+\end{enumerate}
+
+Arithmetic intensity is not always a fixed value; it can scale with the problem size or be effectively increased through caching, which reduces the number of required memory access.
