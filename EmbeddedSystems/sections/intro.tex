@@ -1,0 +1,137 @@
+\section{Introduction}
+\subsection{CPU Performance and Clocking}
+Digital hardware operations are synchronized by a constant-rate clock, which provides the fundamental temporal reference for state transitions within a processor. The clock period defines the duration of a single clock cycle (measured in seconds), while its reciprocal, the clock frequency (or rate), defines the number of cycles per second (measured in Hertz). To accurately evaluate the performance of a computer system, we must isolate the components that contribute to the total execution time. The most direct measure of performance is the CPU Time, which is the actual time the processor spends executing a specific program. This can be expressed as:
+
+\begin{equation}
+    \text{CPU Time} = \frac{\text{CPU Clock Cycles for a Program}}{\text{Clock Rate}}
+\end{equation}
+
+However, this basic formula does not account for the efficiency of the Instruction Set Architecture (ISA) or the underlying microarchitecture. To provide deeper insight, we introduce the Instruction Count (IC) - the total number of instructions executed in a program - and the Cycles Per Instruction (CPI), which represents the average number of clock cycles required to execute a single instruction:
+
+\begin{equation}
+    \text{CPI} = \frac{\text{CPU Clock Cycles for a Program}}{\text{Instruction Count}}
+\end{equation}
+
+By reorganizing these relationships, we derive the CPU Performance Equation (often called the "Iron Law" of performance). This equation demonstrates that execution time is the product of three distinct factors:
+
+\begin{equation}
+    \text{CPU Time} = \underbrace{\text{Instruction Count}}_\text{\scriptsize ISA and Compiler} \times \underbrace{\text{Cycles Per Instruction}}_\text{\scriptsize Hardware and Optimization} \times \underbrace{\text{Clock Cycle Time}}_\text{\scriptsize Microarchitecture and ISA}
+\end{equation}
+
+Each term in the performance equation is influenced by different aspects of the system design:
+
+\begin{itemize}
+    \item \textit{Instruction Count} is determined by the complexity of the program, the efficiency of the compiler, and the Instruction Set Architecture itself.
+    \item \textit{Cycles Per Instruction (CPI)} depends on the processor's microarchitecture (e.g., pipeline depth, superscalar execution, and cache hits/misses).
+    \item \textit{Clock Cycle Time} is a function of the hardware technology, the circuit's critical path, and the physical constraints of the manufacturing process.
+\end{itemize}
+
+\subsection{Instruction Set Architecture}
+An Instruction Set Architecture (ISA) serves as the abstract interface between the hardware and the lowest-level software. While different computing architectures utilize distinct instruction sets, they often share fundamental operational principles. Early computer systems utilized simplified instruction sets to facilitate easier implementation, a design philosophy that persists in many modern architectures, including the MIPS (Microprocessor without Interlocked Pipelined Stages) instruction set. MIPS is particularly prominent in the embedded systems market, powering a vast array of consumer electronics, networking infrastructure, and peripheral devices like printers and cameras.
+
+\paragraph{Design Principles and Register Organization.} A core tenet of MIPS design is that simplicity favors regularity. By maintaining a consistent instruction format - such as ensuring all arithmetic operations utilize two source operands and one destination - the hardware implementation is simplified, which in turn enables higher performance at a lower silicon cost. In MIPS, arithmetic instructions operate exclusively on registers rather than directly on memory. The architecture features a 32 x 32-bit register file, which stores the most frequently accessed data. Each 32-bbit data unit is referred to as a word. Within this register file, specific naming conventions help the assembler and compiler manage data:
+
+\begin{itemize}
+    \item \NewTexttt{\$t0 - \$t9}: Registers used for temporary values that do not need to be preserved across procedure calls.
+    \item \NewTexttt{\$s0 - \$s7}: Registers used for "saved" variables that must be preserved.
+    \item \NewTexttt{\$0}: A hardwired constant value of 0 that cannot be overwritten, facilitating common operations like data movement or comparisons.
+\end{itemize}
+
+While registers provide high-speed access, the main memory is required for large or complex data structures, such as arrays, dynamic data, and objects. To perform arithmetic on memory-resident data, the processor must execute "load" instructions to move values into registers and "store" instructions to write results back to memory. MIPS employs byte addressing, meaning every unique address identifies a single 8-bit byte. However, because the architecture operates on 32-bit words, word alignment is mandatory: the starting address of any word must be a multiple of four. Furthermore, MIPS traditionally follows a Big-Endian byte ordering, where the most significant byte (MSB) is stored at the lowest memory address of the word.
+
+Because register access is significantly faster than memory access, a primary goal for compilers is to maximize register utilization. When the number of variables exceeds the available registers, the compiler must "spill" less frequently used data to memory, a process that increases instruction count and latency. To further enhance efficiency, MIPS adheres to the principle of making the common case fast. Since small constants are frequently used in code (e.g., incrementing a loop counter), MIPS supports immediate operands. These allow constant values to be embedded directly within the instruction itself, eliminating the need to execute a separate load instruction from memory.
+
+\paragraph{Representing Instructions.} In the MIPS architecture, instructions are encoded as 32-bit binary words, commonly referred to as machine code. To maintain hardware efficiency and regularity, MIPS utilizes a few fixed-length instruction formats. Each format partitions the 32-bit word into specific fields that define the operation (opcode), the registers involved, and any immediate values or offsets.
+
+\textit{MIPS R-Format / }The R-format is used primarily for computational instructions where all operands reside in registers. The 32 bits are divided into six distinct fields:
+
+\begin{itemize}
+    \item \NewTexttt{op} (6 bits): The operation code (opcode) which defines the general type of instruction. For R-format instructions, this value is typically zero.
+    \item \NewTexttt{rs} (5 bits): The first source register number.
+    \item \NewTexttt{rt} (5 bits): The second source register number.
+    \item \NewTexttt{shamt} (5 bits): The shift amount, used specifically for shift instructions (e.g., Logical Shift Left). For standard arithmetic, this field is set to zero.
+    \item \NewTexttt{funct} (6 bits): The function code. Since the opcode for R-format instructions is zero, this field is used to select the specific arithmetic or logical operation (e.g., addition vs. subtraction).
+\end{itemize}
+
+\textit{MIPS I-Format / } The I-format is designed for instructions that require an immediate constant or a memory address offset. It consolidates the final three fields of the R-format into a single 16-bit field, organized as follows:
+
+\begin{itemize}
+    \item \NewTexttt{op} (6 bits): The opcode, which uniquely identifies the instruction type (e.g., \NewTexttt{addi}, \NewTexttt{lw}, \NewTexttt{sw}).
+    \item \NewTexttt{rs} (6 bits): The source register (used as a base address for memory operations or a source operand for arithmetic).
+    \item \NewTexttt{rt} (6 bits): The destination register (for loads and immediate arithmetic) or the source register (for store operations).
+    \item \NewTexttt{Address/Immediate} (16 bits): A constant value ranging from \(-2^{15}\) to \(2^{15} - 1\). In memory-access instructions, this acts as a signed offset added to the base address in \NewTexttt{rs}.
+\end{itemize}
+
+\begin{table}[!b]
+    \centering
+    \begin{tabular}{
+        >{\raggedright\arraybackslash}p{0.14\textwidth}
+        >{\raggedright\arraybackslash}p{0.10\textwidth}
+        >{\raggedright\arraybackslash}p{0.35\textwidth}
+        >{\raggedright\arraybackslash}p{0.25\textwidth}
+        }
+        \toprule
+        \textbf{Instruction} & \textbf{Type} & \textbf{Operation}                    & \textbf{Example}                  \\
+        \midrule
+        \multicolumn{4}{l}{\textit{Arithmetic \& Logical}}                                                               \\
+        \NewTexttt{add}      & R             & \NewTexttt{\$rd = \$rs + \$rt}        & \NewTexttt{add \$t0, \$s1, \$s2}  \\
+        \NewTexttt{sub}      & R             & \NewTexttt{\$rd = \$rs - \$rt}        & \NewTexttt{sub \$t0, \$s1, \$s2}  \\
+        \NewTexttt{addi}     & I             & \NewTexttt{\$rt = \$rs + imm}         & \NewTexttt{addi \$t0, \$s1, 10}   \\
+        \NewTexttt{and}      & R             & \NewTexttt{\$rd = \$rs \& \$rt}       & \NewTexttt{and \$t0, \$t1, \$t2}  \\
+        \NewTexttt{sll}      & R             & \NewTexttt{\$rd = \$rt << shamt}      & \NewTexttt{sll \$t0, \$s1, 2}     \\
+        \multicolumn{4}{l}{\textit{Data Transfer}}                                                                       \\
+        \NewTexttt{lw}       & I             & \NewTexttt{\$rt = Mem[\$rs + off]}    & \NewTexttt{lw \$t0, 8(\$s1)}      \\
+        \NewTexttt{sw}       & I             & \NewTexttt{Mem[\$rs + off] = \$rt}    & \NewTexttt{sw \$t0, 4(\$s1)}      \\
+        \NewTexttt{lui}      & I             & \NewTexttt{\$rt = imm << 16}          & \NewTexttt{lui \$t0, 0x1234}      \\
+        \multicolumn{4}{l}{\textit{Branch \& Jump}}                                                                      \\
+        \NewTexttt{beq}      & I             & \NewTexttt{if (\$rs == \$rt) branch}  & \NewTexttt{beq \$t0, \$t1, Label} \\
+        \NewTexttt{slt}      & R             & \NewTexttt{if (\$rs < \$rt) \$rd = 1} & \NewTexttt{slt \$t0, \$s1, \$s2}  \\
+        \NewTexttt{j}        & J             & \NewTexttt{jump to addr}              & \NewTexttt{j Label}               \\
+        \NewTexttt{jr}       & J             & \NewTexttt{jump to addr in register}  & \NewTexttt{jr \$ra}               \\
+        \bottomrule
+    \end{tabular}
+    \caption{Common MIPS instructions categorized by function—arithmetic/logical, data transfer, and control flow—with operation semantics and illustrative examples.}
+\end{table}
+
+The fundamental breakthrough of modern computing is the stored-program concept, which treats instructions and data as logically equivalent. Both are represented as binary sequences and reside in the same memory space. This uniformity allows programs to operate on other programs, as seen in compilers, linkers, and loaders, enabling a sophisticated software ecosystem. Furthermore, the standardization of these instruction sets ensures binary compatibility, allowing compiled software to execute reliably across different hardware implementations of the same ISA\@.
+
+\paragraph{Management of memory during function execution.} In MIPS assembly and similar RISC architectures, the management of memory during function execution relies on a set of specialized registers. These registers coordinate the lifecycle of data and control flow, ensuring that variables are accessible and that the processor can return to the correct execution point after a function completes.
+
+\begin{itemize}
+    \item \textit{Global Pointer}: The Global Pointer (\NewTexttt{\$gp}) is designed to streamline access to static data, which consists of variables whose size and location are known at compiler time (e.g., global variables or constants). In memory, these variables are stored in the "Static" or "Data" segment. Without a global pointer, accessing these variables would require a two-step process: first loading the upper 16 bits of the address and then the lower 16 bits. By convention, \NewTexttt{\$gp} is initialized to point to the middle of a 64 KB block within this static segment. This allows the processor to access any variable in that range using a single instruction with a 16-bit signed offset relative to \NewTexttt{\$gp}. This optimizes performance by reducing the instruction count for global data manipulation.
+    \item \textit{Stack Pointer}: The Stack Pointer (\NewTexttt{\$sp}) manages the stack segment, a region of memory that grows and shrinks dynamically as functions are called and return. In MIPS, the stack grows "downwards" from higher memory addresses to lower ones. The primary role of \NewTexttt{\$sp} is to track the current top of the stack. When a function requires space for local variables or needs to preserve register values, it "allocates" space by incrementing \NewTexttt{\$sp} back to its original position. This area of memory is strictly LIFO, making it ideal for managing the nested nature of function calls.
+    \item \textit{Frame Pointer}: While \NewTexttt{\$sp} moves during the execution of a function (for instance, when pushing temporary arguments onto the stack), the Frame Pointer (\NewTexttt{\$fp}) remains stationary, pointing to the base of the current activation record (or stack frame). The \NewTexttt{\$fp} provides a stable reference point for accessing local variables and parameters. Because the distance between \NewTexttt{\$fp} and a specific local variable remains constant throughout the function's execution, the compiler can generate fixed offsets to access that data. While some compilers can optimize code to use only \NewTexttt{\$sp}, the use of \NewTexttt{\$fp} is critical in functions where the stack size may change dynamically, such as when using \NewTexttt{malloc()} in C.
+    \item \textit{Return Address}: The Return Address register (\NewTexttt{\$ra}) is fundamental to the "Link" part of the \NewTexttt{jal} instruction. When a function is called via \NewTexttt{jal}, the processor automatically stores the address of the next instruction into \NewTexttt{\$ra}. The effect on memory depends on the type of function:
+          \begin{itemize}
+              \item \textit{Leaf Procedures}: If a function does not call any other functions, it is a "leaf". It can simply perform its task and return using \NewTexttt{jr \$ra} without ever touching the memory stack for control purposes.
+              \item \textit{Non-Leaf Procedures}: If a function calls another function, the new \NewTexttt{jal} would overwrite the current value in \NewTexttt{\$ra}. Therefore, the calling function must first save the current \NewTexttt{\$ra} onto the stack (using \NewTexttt{\$sp}) during its prologue and restore it during its epilogue.
+          \end{itemize}
+\end{itemize}
+
+\subsection{The Processor}
+The fundamental operation of a processor involves a continuous cycle of fetching, decoding, and executing instructions. This process begins with the Program Counter (PC), which holds the address of the next instruction to be retrieved from instruction memory. Once the instruction is fetched, its bit fields specify register numbers within the register file, enabling the processor to read the required operands. Depending on the instruction class, the Arithmetic Logic Unit (ALU) is then employed to calculate a numerical result, compute a memory address for load/store operations, or determine a branch target address. In standard sequential execution, the PC is updated to PC + 4 to point to the next word-aligned instruction.
+
+At the hardware level, all information is encoded in binary, where low voltage levels represent a logical - and high voltage levels represent a logical 1. These signals are transmitted via single wires for individual bits or through multi-wire buses for multi-bit data. The processor's internal circuitry is composed of two functional building blocks:
+
+\begin{itemize}
+    \item \textit{Combinational Elements}: These elements (such as the ALU, multiplexers, and adders) transform data such that the output is a pure function of the current inputs. They do not retain memory of previous states.
+    \item \textit{State Elements}: These components (such as registers and memory) are capable of storing information. They define the "state" of the computer and require a synchronization signal to manage data updates.
+\end{itemize}
+
+State elements rely on a clock signal to determine when to update their stored values. Most modern processors utilize edge-triggered clocking, meaning the state is updated only when the clock signal transitions (typically from a low to a high voltage, or the "rising edge"). For more precise control, certain registers include a write control input; the stored value is only updated on the clock edge if this signal is asserted. This is critical for maintaining data stability when a value needs to be preserved over multiple cycles. The interaction between these elements defines the processor's timing requirements. Combinational logic performs its transformations during the interval between clock edges. Signals flow from one state element, through the combinational logic, and arrive at the input of the next state element. Consequently, the clock period, and by extension the processor's frequency, is dictated by the longest propagation delay through the combinational logic. The clock cycle must be sufficiently long to allow all signals to stabilize before the next active edge triggers the next state update.
+
+\paragraph{Functional Datapath and Instruction Execution.} The datapath is the hardware representation of the steps required to execute an instruction. In a basic MIPS implementation, the flow of data is determined by the instruction type, which dictates how the Arithmetic Logic Unit (ALU), the register file, and memory interact.
+
+\begin{itemize}
+    \item \textit{R-Format Instructions}: R-format instructions follow a strictly register-based flow: they read two operands from the register file, perform a specified arithmetic or logical operation within the ALU, and write the resulting value back into a destination register.
+    \item \textit{I-Format Instructions}: Load and store instructions, however, must interface with data memory. These instructions use the I-format, which includes a 16-bit immediate field representing a displacement. To compute the effective memory address, the processor adds this displacement to a base address stored in a register. Because the internal datapath is 32 bits wide, the 16-bit offset must first undergo sign-extension. This process replicates the most significant bit of the 16-bit constant across the upper 16 bits of the 32-bit bus, ensuring the numerical value remains the same, whether positive or negative, when converted to a larger format. Once the address is calculated, a load operation reads data from memory into a register, while a store operation writes a register's value into memory.
+    \item \textit{Branching Instructions}: Branch instructions, such as \NewTexttt{beq}, determine the next instruction's address based on a comparison. The processor reads two register operands and utilizes the ALU to subtract one from the other. If the "Zero" output of the ALU is asserted, the condition is met. Calculating the branch target address requires a specific multistep transformation of the 16-bit displacement field:
+
+          \begin{enumerate}
+              \item The 16-bit displacement is sign-extended to 32 bits to allow for both forward and backward branches.
+              \item Since all MIPS instructions are 32 bits long and word-aligned, the immediate field stores the jump distance in words rather than bytes to maximize the branching range. Shifting left by two bits effectively multiplies the value by four, converting the word offset into a byte offset.
+              \item This byte offset is then added to PC + 4. The use of PC + 4 is a result of the hardware naturally incrementing the PC during the initial fetch stage before the branch offset is calculated.
+          \end{enumerate}
+\end{itemize}
+
+In a "first-cut" or single-cycle datapath, the hardware is designed to complete one full instruction within a single clock cycle. This architectural choice introduces specific hardware requirements. Because a single functional element cannot perform two different tasks simultaneously within one cycle, the system requires separate instruction and data memories. This prevents a "structural hazard" where the processor would otherwise need to fetch a new instruction and access data memory at the same time. Furthermore, because different instructions require data from different sources, the datapath utilizes multiplexers at critical junctions. These Muxes act as data selectors, directed by the Control Unit to choose the appropriate path. For example, a Mux is used to decide whether the ALU's second operand comes from the register file (for R-format) or from the sign-extended immediate field (for load/store). Another Mux determines whether the value written to the register file originates from the ALU or from data memory.
