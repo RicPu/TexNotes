@@ -26,10 +26,28 @@ Each term in the performance equation is influenced by different aspects of the 
     \item \textit{Clock Cycle Time} is a function of the hardware technology, the circuit's critical path, and the physical constraints of the manufacturing process.
 \end{itemize}
 
+\paragraph{Comparison: Single-Cycle vs. 5-Stage Pipeline Execution.} In a single-cycle processor, every instruction takes exactly 1 clock cycle to execute from start to finish. While this result in an ideal CPI of 1, the clock cycle must be long enough to accommodate the slowest possible instruction (typically a "Load" instruction), leading to a slow overall clock rate. In contrast, a 5-stage pipeline ideally completes 1 instruction every clock cycle once the pipeline is full, also aiming for a CPI of 1. However, the total time for a single instruction to pass through all 5 stage is 5 clock cycles. The advantage of the 5-stage pipeline is that because each stage is simpler, the clock cycle time can be much shorter, significantly increasing the number of instructions finished per second.
+
+In a single-cycle processor, an entire instruction, from fetching it to saving the result, must complete within one clock cycle. This creates a conflict for instructions like \NewTexttt{lw} or \NewTexttt{sw} because the processor must access memory to fetch the instruction itself, and, in the same cycle, must access memory again to read or write the data. If there were only one unified memory port, the hardware would be physically unable to perform both of these operations simultaneously within that single cycle. By using separate memories, the processor can provide independent pathways for instructions and data. This allows the "Instruction Fetch" and "Memory Access" stages to occur at the exact same time without competing for a single hardware resource. With separate units, the control logic doesn't need to manage complex timing or waiting states; it simply enables the appropriate memory unit based on whether the current instruction is a memory-access type or not.
+
+\paragraph{Hazards.} In practice, especially in pipelined processors, we distinguish between Ideal CPI and the overhead caused by Pipeline Stalls. The expanded formula for CPI in a pipelined processor is:
+
+\begin{equation}
+    \text{CPI}_\text{actual} = \text{CPI}_\text{ideal} + \text{Stalls per Instruction}
+\end{equation}
+
+In a perfectly pipelined processor, the Ideal CPI is 1, meaning one instruction completes every clock cycle. Stalls are cycles where the pipeline must wait because of Hazards. These are generally grouped into three types:
+
+\begin{enumerate}
+    \item \textit{Structural Hazards}: Occur when the hardware cannot support a specific combination of instruction in the same clock cycle (e.g., A processor has only one memory port, but in one cycle, the "Instruction Fetch" stage and the "Memory Access" stage both need to use it.)
+    \item \textit{Data Hazards}: Occur when an instruction depends on the result of a previous instruction that is still moving through the pipeline. The most common type is called RAW (Read After Write), where instruction B needs a value that instruction A hasn't finished writing yet. The typical mitigation is forwarding, which allows the CPU to use a result as soon as it's computed in the ALU, rather than waiting for it to be written to a register.
+    \item \textit{Control Hazards}: Occur when the pipeline makes a decision based on an instruction before it knows the outcome. If the branch is taken, the instructions already fetched into the pipeline are wrong and must be flushed, leading to a significant performance penalty. Branch prediction is the primary solution here, where the hardware guesses the path the program will take.
+\end{enumerate}
+
 \subsection{Instruction Set Architecture}
 An Instruction Set Architecture (ISA) serves as the abstract interface between the hardware and the lowest-level software. While different computing architectures utilize distinct instruction sets, they often share fundamental operational principles. Early computer systems utilized simplified instruction sets to facilitate easier implementation, a design philosophy that persists in many modern architectures, including the MIPS (Microprocessor without Interlocked Pipelined Stages) instruction set. MIPS is particularly prominent in the embedded systems market, powering a vast array of consumer electronics, networking infrastructure, and peripheral devices like printers and cameras.
 
-\paragraph{Design Principles and Register Organization.} A core tenet of MIPS design is that simplicity favors regularity. By maintaining a consistent instruction format - such as ensuring all arithmetic operations utilize two source operands and one destination - the hardware implementation is simplified, which in turn enables higher performance at a lower silicon cost. In MIPS, arithmetic instructions operate exclusively on registers rather than directly on memory. The architecture features a 32 x 32-bit register file, which stores the most frequently accessed data. Each 32-bbit data unit is referred to as a word. Within this register file, specific naming conventions help the assembler and compiler manage data:
+\paragraph{Design Principles and Register Organization.} A core tenet of MIPS design is that simplicity favors regularity. By maintaining a consistent instruction format - such as ensuring all arithmetic operations utilize two source operands and one destination - the hardware implementation is simplified, which in turn enables higher performance at a lower silicon cost. In MIPS, arithmetic instructions operate exclusively on registers rather than directly on memory. The architecture features a 32 x 32-bit register file, which stores the most frequently accessed data. Each 32-bit data unit is referred to as a word. Within this register file, specific naming conventions help the assembler and compiler manage data:
 
 \begin{itemize}
     \item \NewTexttt{\$t0 - \$t9}: Registers used for temporary values that do not need to be preserved across procedure calls.
@@ -49,6 +67,7 @@ Because register access is significantly faster than memory access, a primary go
     \item \NewTexttt{op} (6 bits): The operation code (opcode) which defines the general type of instruction. For R-format instructions, this value is typically zero.
     \item \NewTexttt{rs} (5 bits): The first source register number.
     \item \NewTexttt{rt} (5 bits): The second source register number.
+    \item \NewTexttt{rd} (5 bits): The destination register number.
     \item \NewTexttt{shamt} (5 bits): The shift amount, used specifically for shift instructions (e.g., Logical Shift Left). For standard arithmetic, this field is set to zero.
     \item \NewTexttt{funct} (6 bits): The function code. Since the opcode for R-format instructions is zero, this field is used to select the specific arithmetic or logical operation (e.g., addition vs. subtraction).
 \end{itemize}
@@ -57,8 +76,8 @@ Because register access is significantly faster than memory access, a primary go
 
 \begin{itemize}
     \item \NewTexttt{op} (6 bits): The opcode, which uniquely identifies the instruction type (e.g., \NewTexttt{addi}, \NewTexttt{lw}, \NewTexttt{sw}).
-    \item \NewTexttt{rs} (6 bits): The source register (used as a base address for memory operations or a source operand for arithmetic).
-    \item \NewTexttt{rt} (6 bits): The destination register (for loads and immediate arithmetic) or the source register (for store operations).
+    \item \NewTexttt{rs} (5 bits): The source register (used as a base address for memory operations or a source operand for arithmetic).
+    \item \NewTexttt{rt} (5 bits): The destination register (for loads and immediate arithmetic) or the source register (for store operations).
     \item \NewTexttt{Address/Immediate} (16 bits): A constant value ranging from \(-2^{15}\) to \(2^{15} - 1\). In memory-access instructions, this acts as a signed offset added to the base address in \NewTexttt{rs}.
 \end{itemize}
 
@@ -111,7 +130,7 @@ The fundamental breakthrough of modern computing is the stored-program concept, 
 \subsection{The Processor}
 The fundamental operation of a processor involves a continuous cycle of fetching, decoding, and executing instructions. This process begins with the Program Counter (PC), which holds the address of the next instruction to be retrieved from instruction memory. Once the instruction is fetched, its bit fields specify register numbers within the register file, enabling the processor to read the required operands. Depending on the instruction class, the Arithmetic Logic Unit (ALU) is then employed to calculate a numerical result, compute a memory address for load/store operations, or determine a branch target address. In standard sequential execution, the PC is updated to PC + 4 to point to the next word-aligned instruction.
 
-At the hardware level, all information is encoded in binary, where low voltage levels represent a logical - and high voltage levels represent a logical 1. These signals are transmitted via single wires for individual bits or through multi-wire buses for multi-bit data. The processor's internal circuitry is composed of two functional building blocks:
+At the hardware level, all information is encoded in binary, where low voltage levels represent a logical 0 and high voltage levels represent a logical 1. These signals are transmitted via single wires for individual bits or through multi-wire buses for multi-bit data. The processor's internal circuitry is composed of two functional building blocks:
 
 \begin{itemize}
     \item \textit{Combinational Elements}: These elements (such as the ALU, multiplexers, and adders) transform data such that the output is a pure function of the current inputs. They do not retain memory of previous states.
@@ -135,3 +154,74 @@ State elements rely on a clock signal to determine when to update their stored v
 \end{itemize}
 
 In a "first-cut" or single-cycle datapath, the hardware is designed to complete one full instruction within a single clock cycle. This architectural choice introduces specific hardware requirements. Because a single functional element cannot perform two different tasks simultaneously within one cycle, the system requires separate instruction and data memories. This prevents a "structural hazard" where the processor would otherwise need to fetch a new instruction and access data memory at the same time. Furthermore, because different instructions require data from different sources, the datapath utilizes multiplexers at critical junctions. These Muxes act as data selectors, directed by the Control Unit to choose the appropriate path. For example, a Mux is used to decide whether the ALU's second operand comes from the register file (for R-format) or from the sign-extended immediate field (for load/store). Another Mux determines whether the value written to the register file originates from the ALU or from data memory.
+
+\paragraph{Advantages and Disadvantages of a single-cycle MIPS implementation.} In a single-cycle MIPS implementation, the defining characteristic is that the datapath is designed so that every instruction completes in exactly one clock cycle. This results in a CPI of 1. While this sounds ideal, it forces a major trade-off between the complexity of the hardware and the overall speed of the system. The primary advantage of a single-cycle implementation is its simplicity. Since every instruction starts and ends in a single clock tick, the control unit is purely combinational.
+
+\begin{itemize}
+    \item \textit{No State Management}: Unlike multi-cycle or pipelined designs, the processor doesn't need a complex Finite State Machine to keep track of which stage an instruction is in.
+    \item \textit{Predictable Timing}: Because every instruction takes one cycle, the control signals for every component can be generated simultaneously from the opcode as soon as the instruction is fetched.
+    \item \textit{Ease of Design}: This makes it an ideal starter architecture for learning or for very low-cost embedded systems where performance is not a priority, but minimizing design time and complexity is.
+\end{itemize}
+
+The biggest disadvantage is that the clock cycle time is determined by the worst-case path, the longest possible route an instruction takes through the hardware.
+
+\begin{itemize}
+    \item \textit{The Slowest Instruction Penalty}: In MIPS, the \NewTexttt{lw} instruction is typically the longest because it must go through the Instruction Memory, the Register File, the ALU, the Data Memory, and then back to the register file.
+    \item \textit{Wasteful for Simple Instructions}: Even if an instruction is very fast, the processor must wait for the full duration of the long clock cycle before starting the next one.
+    \item \textit{Violates the "Make the Common Case Fast" Principle}: In most programs, simple arithmetic is more common than memory loads. However, the single-cycle design forces the fast common cases to run at the speed of the slow, less frequent cases.
+\end{itemize}
+
+\subsection{Exercises}
+
+\subsubsection{Translate to MIPS Binary Representation}
+For each MIPS instruction below, write its 32-bit binary encoding. Pay attention to the instruction format, opcode, registers, shamt, funct, and immediate values as applicable.
+
+\begin{enumerate}
+    \item \NewTexttt{add \$t1, \$t2, \$t3}: This is an R-format instruction. The opcode for \texttt{add} is \texttt{000000}. The source registers are \texttt{\$t2 = 01010} and \texttt{\$t3 = 01011}, and the destination register is \texttt{\$t1 = 01001}. Since this is a standard addition, the shift amount (\texttt{shamt}) is \texttt{00000}, and the function code (\texttt{funct}) is \texttt{100000}.
+    \item \NewTexttt{sub \$s0, \$s1, \$s2}: This is an R-format instruction. The opcode for \texttt{sub} is \texttt{000000}. The source registers are \texttt{\$s1 = 10001} and \texttt{\$s2 = 10010}, and the destination register is \texttt{\$s0 = 10000}. Since this is a standard subtraction, the shift amount (\texttt{shamt}) is \texttt{00000}, and the function code (\texttt{funct}) is \texttt{100010}.
+    \item \NewTexttt{sll \$t0, \$t1, 4}: This is an R-format instruction. The opcode for \texttt{sll} is \texttt{00000}. The source register is \texttt{\$t0 = 01000}, while the other is not used, and the destination register is \texttt{\$t1 = 01000}. Since this is a shifting operation, the shift amount (\texttt{shamt}) is \texttt{00100}, and the function code (\texttt{funct}) is \texttt{000000}.
+    \item \NewTexttt{addi \$t0, \$t1, 10}: This is an I-format instruction. The opcode for \texttt{addi} is \texttt{001000}. The source register is \texttt{\$t0 = 01000}, and the destination register is \texttt{\$t1 = 01001}. The immediate is a 16-bit value that translates to \texttt{0000000000001010}.
+    \item \NewTexttt{lw \$s0, 12(\$t2)}: This is an I-format instruction. The opcode for \texttt{lw} is \texttt{100011}. The first register is \texttt{\$s0 = 10000}, and the second register is \texttt{\$t2 = 01010}. The offset is a 16-bit value that translates to \texttt{0000000000001100}.
+    \item \NewTexttt{beq \$s0, \$s1, 8}: This is an I-format instruction. The opcode for \texttt{beq} is \texttt{000100}. The first register is \texttt{\$s0 = 10000}, and the second register is \texttt{\$s1 = 10001}. The offset is a 16-bit value that translates to \texttt{0000000000001000}.
+    \item \NewTexttt{bne \$t0, \$t1, -4}: This is an I-format instruction. The opcode for \texttt{bne} is \texttt{000101}. The first register is \texttt{\$t0 = 01000}, and the second register is \texttt{\$t1 = 01001}. The offset is a 16-bit value that translates to \texttt{1111111111111100}.
+    \item \NewTexttt{j 0x00400010}: This is a J-format instruction. The opcode for \texttt{j} is \texttt{000010}. The address is a 26-bit hexadecimal value that needs to be converted to binary. Since the jump instruction store word addresses, not byte addresses, we first need to shift right by 2. The final value is \texttt{00000001000000000000000100}.
+\end{enumerate}
+
+\subsubsection{Datapath}
+\begin{enumerate}
+    \item For a standard R-type instruction (like \NewTexttt{add \$t1, \$t2, \$t3}), what must the \NewTexttt{RegWrite}, \NewTexttt{RegDst}, and \NewTexttt{ALUSrc} be set to?
+    
+    In a MIPS single-cycle processor, the execution of an R-type instruction requires the \NewTexttt{RegWrite} signal to be asserted to enable writing to the register file, and \NewTexttt{RegDst} to be set to 1 so that the destination register is selected from bits \NewTexttt{[15--11]}. Meanwhile, \NewTexttt{ALUSrc} must be 0 to ensure the ALU receives its second operand from a register rather than an immediate value.
+
+    \item When executing a \NewTexttt{sw}, the processor writes data into the Data Memory. Which signal must be 0 to ensure we don't accidentally overwrite a register? Does the value of \NewTexttt{MemToReg} matter for this instruction? Why?
+    
+    For a \NewTexttt{sw} instruction, the primary goal is writing to memory, so \NewTexttt{MemWrite} must be 1. To prevent accidentally overwriting a register, the \NewTexttt{RegWrite} signal must be 0. In this case, the value of \NewTexttt{MemToReg} is technically a "don't care" because the register write is disabled, though \NewTexttt{MemRead} is typically set to 0 to prevent unnecessary memory activity.
+
+    \item For a \NewTexttt{lw} instruction, data travels from Memory back to the Register file. What should \NewTexttt{MemRead} and \NewTexttt{MemToReg} be set to? Trace the path: Which Mux is responsible for selecting the data coming from Memory instead of the ALU result?
+    
+    When performing a \NewTexttt{lw} instruction, both \NewTexttt{MemRead} and \NewTexttt{MemToReg} must be set to 1. This configuration ensures that data is pulled from memory and that the multiplexer positioned to the right of the Data Memory selects this memory output to be sent back to the register file, rather than the ALU result.
+
+    \item Look at the bottom of the diagram. The Sign-extend unit takes bits \NewTexttt{Instruction [15--0]} and outputs 32 bits. Which two instruction types (I-type) primarily use this path to reach the ALU\@? Why is this necessary for a \NewTexttt{beq} instruction?
+    
+    The Sign-extend unit is crucial for I-type instructions like \NewTexttt{lw} and \NewTexttt{sw}, as it converts 16-bit offsets into 32-bit values. For a \NewTexttt{beq} instruction, this is necessary because the branch offset must be added to the 32-bit Program Counter (PC) to calculate the target address.
+
+    \item There is a Mux right before the ALU's second input. If \NewTexttt{ALUSrc} is 0, where is the second operand coming from? If \NewTexttt{ALUSrc} is 1, where is the second operand coming from?
+    
+    The second operand for the ALU is determined by the \NewTexttt{ALUSrc} Mux: if \NewTexttt{ALUSrc} is 0, the operand comes from Read Data 2; if it is 1, it comes from the Sign-extend block.
+
+    \item MIPS R-type instructions use bits \NewTexttt{[15--11]} for the destination register, while I-type instructions use bits \NewTexttt{[20--16]}. Based on the diagram, if \NewTexttt{RegDst} is 0, which instruction field is being used as the "Write register" address?
+    
+    The choice of destination register is handled by the \NewTexttt{RegDst} Mux. If \NewTexttt{RegDst} is 0, the processor uses bits \NewTexttt{[20--16]} as the "Write register" address, which is the standard format for I-type instructions.
+
+    \item Notice the AND gate near the top right, which takes the \NewTexttt{Branch} signal and the \NewTexttt{Zero} output from the ALU\@. Under what specific condition will the output of this AND gate be 1? What does this output trigger the Mux above it to do?
+    
+    Control flow for branches is managed by an AND gate that receives the \NewTexttt{Branch} control signal and the \NewTexttt{Zero} output from the ALU. This gate outputs a 1 only if the instruction is a branch and the ALU determined the two registers are equal (resulting in a zero subtraction). This high signal triggers the branch Mux to select the branch target address (PC + 4 + offset) instead of the sequential PC + 4.
+
+    \item Look at the very top of the diagram labeled Jump address. How is this 32-bit address formed?
+    
+    For a \NewTexttt{j} instruction, the 32-bit address is formed by taking the 26-bit immediate field from the instruction, shifting it left by 2 bits to align with word boundaries, and concatenating it with the upper 4 bits of the current PC + 4.
+
+    \item The main Control unit sends a signal called ALUOp to a smaller ALU Control block. What additional information does the ALU Control block need from the instruction to decide exactly what math operation to perform?
+    
+    While the main Control unit provides the \NewTexttt{ALUOp} signal to categorize the instruction type, the ALU Control block specifically requires the funct field from R-type instructions to distinguish between different arithmetic operations like addition, subtraction, or logical shifts.
+\end{enumerate}
