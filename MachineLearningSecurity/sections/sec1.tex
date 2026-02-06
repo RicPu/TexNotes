@@ -42,6 +42,21 @@ A first thought is to use Gradient Descent (GD) to minimize the model's discrimi
     \item \textit{Alignment of Evasion Gradients}: Transferability is highest when the direction of the gradient used to attack the surrogate model is similar to the gradient direction that would be required to attack the target model. If both models have learned similar representations, their gradients will align, making attacks highly transferable.
 \end{enumerate}
 
+Query-based attacks represent a practical and powerful approach for generating adversarial examples. The attacker interacts with the model solely by sending inputs and observing its output predictions. By strategically querying the model and optimizing the adversarial input based on this feedback, an effective evasion attack can be constructed. This makes query attacks highly relevant for targeting real-world Machine-Learning-as-a-Service platforms. However, the primary constraint is minimizing the number of queries to avoid detection by rate-limiting or anomaly detection systems; the number of queries needed can become enormous for models fortified with advanced adversarial training or other robustness measures. These methods are typically orders of magnitude slower than gradient-based attacks, as they must reconstruct loss landscape information from discrete samples.
+
+\begin{itemize}
+    \item \textit{Zeroth Order Attack (ZOO)}: This attack directly estimates the gradient and Hessian of the target model's loss function with respect to the input. It uses finite differences: for each pixel or dimension, it queries the model at the current point and at a point perturbed by a very small amount. By sampling random coordinates or using stochastic coordinate descent, ZOO constructs a gradient approximation without training a surrogate model. The method is designed to jointly minimize both the number of queries and the final perturbation size.
+    \item \textit{Natural Evolutionary Strategies (NES)}: NES frames the problem as optimizing a distribution over potential adversarial inputs (typically a Gaussian). Instead of perturbing the input directly, it estimates the gradient of the expected loss with respect to the distribution's parameters. It employs the natural gradient: pre-multiplying the standard gradient by the inverse of the Fisher Information Matrix, which accounts for the information geometry of the parameter space. This makes the update mode efficient and less sensitive to the specific parameterization of the search distribution.
+
+    \begin{equation}
+        \tilde{\nabla}_\theta J = F^{-1} \nabla_\theta J(\theta)
+    \end{equation}
+
+    where \(\theta\) parameterizes the search distribution, \(J\) is the expected loss, and \(F\) is the Fisher Information Matrix.
+
+    \item \textit{Genetic Algorithms}: This population-based approach does not explicitly estimate gradients. It maintains a pool of candidate solutions (perturbed images), evaluates their fitness, and iteratively applies bio-inspired operators: selection (retaining the best candidate), crossover (mixing features between candidates), and mutation (adding small random noise). Over generations, the population evolves toward highly effective adversarial examples.
+\end{itemize}
+
 \subsubsection{Evasion of Multi-class Classifiers}
 In multi-class classification problems, an attacker can have different precision in their goals. This leads to two distinct categories of attacks, defined by the type of error they aim to cause.
 

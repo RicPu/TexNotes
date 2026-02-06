@@ -1,31 +1,37 @@
 \section{Poisoning Attacks}
-A poisoning attack is a training-time attack where an adversary injects malicious data into a model's training pipeline to corrupt the learned parameters. The primary goal is to compromise the system's normal operation. Two distinct high-level objectives define these attacks:
+A poisoning attack is a training-time attack where an attacker injects malicious data into a model's training dataset to corrupt the learned parameters, with the goal of compromising the system's normal operations. Poisoning attacks can be classified into:
 
 \begin{itemize}
-    \item \textit{Indiscriminate Poisoning (Availability Attack)}: The goal is to cause a general degradation in overall model performance, degrading the system's availability.
-    \item \textit{Targeted Poisoning (Integrity Attack)}: The goal is to create a specific, hidden vulnerability to allow subsequent intrusion on chosen inputs without affecting general performance, attacking the system's integrity.
+    \item \textit{Indiscriminate Poisoning}: The goal is to cause a general degradation in overall model performance, degrading the system's availability.
+    \item \textit{Targeted Poisoning}: The goal is to create a specific, hidden vulnerability to allow subsequent intrusion on chosen inputs without affecting general performance, attacking the system's integrity.
 \end{itemize}
 
 \subsection{Indiscriminate Poisoning}
 From a mathematical perspective, the attacker's problem in an indiscriminate poisoning attack can be formally defined as a bi-level optimization problem, often conceptualized as a leader/follower game.
 
 \begin{itemize}
-    \item \textit{Inner Problem (Follower)}: The legitimate training algorithm minimizes its loss on the poisoned training set, which includes the attacker's rogue point \((x_c, y_c)\).
+    \item \textit{Inner Problem (Follower)}: The legitimate training algorithm minimizes its loss on the poisoned training dataset, which includes the attacker's rogue point \((x_c, y_c)\).
 
           \begin{equation}
               w^*(x_c) \in \arg\min_w \mathcal{L}(D_\text{tr} \cup \{(x_c, y_c)\}, w)
           \end{equation}
 
-    \item \textit{Outer Problem (Leader)}: The attacker searches for the optimal rogue point that, when used in the inner problem, forces the resulting model \(w^*\) to perform the worst on a clean validation set.
+    \item \textit{Outer Problem (Leader)}: The attacker searches for the optimal rogue point that, when used in the inner problem, forces the resulting model's parameters \(w^*\) to perform the worst on a clean validation set.
 
           \begin{equation}
               \max_{x_c} \mathcal{L} (D_\text{val}, w^*(x_c))
           \end{equation}
 \end{itemize}
 
-Directly solving this nested problem is computationally hard. Common approaches include replacing the inner loop with its Karush-Kuhn-Tucker (KKT) equilibrium conditions or using implicit differentiation to compute hypergradients is tractable for convex models like SVM and linear regression. For non-convex deep neural networks (DNNs), methods like unrolled optimization are used, which approximate the inner solution by back-propagating through a finite number of training steps. In some linear model settings, optimal indiscriminate attacks have been shown to reduce to simpler, highly efficient heuristics like maximizing class-conditional data density.
+Directly solving this nested problem is computationally hard. Common approaches include replacing the inner loop with its Karush-Kuhn-Tucker (KKT) equilibrium conditions (at the optimal solution, a specific set of conditions must hold, differentiate through these conditions directly) is tractable for convex models like SVM and linear regression. For non-convex deep neural networks (DNNs), methods like unrolled optimization are used, which approximate the inner solution by back-propagating through a finite number of training steps. In some linear model settings, optimal indiscriminate attacks have been shown to reduce to simpler, highly efficient heuristics like maximizing class-conditional data density.
 
-\paragraph{Specialized Poisoning Attack Variants.} Beyond accuracy, poisoning attacks can target other critical system properties. Poisoning Attacks on Algorithmic Fairness introduce or amplify discriminatory bias against specific groups. This is achieved via a gradient-based optimization framework that crafts points to maximize the disparity in model performance across groups. Notably, attacks optimized on a substitute model can transfer to a black-box target model. Sponge Poisoning aim to drain battery and cause delays in resource-constrained systems. The attacker manipulates the training to create a model with reduced activation sparsity. This forces hardware accelerators to perform more computations during inference for any input, increasing energy use and latency without affecting accuracy.
+\paragraph{Specialized Poisoning Attack Variants.} Beyond accuracy, poisoning attacks can target other critical system properties. Poisoning Attacks on Algorithmic Fairness introduce or amplify discriminatory bias against specific groups. This is achieved via a gradient-based optimization framework that crafts points to maximize the disparity in model performance across groups.
+
+\begin{equation}
+    \mathcal{L}(D_\text{val}, \theta) = \underbrace{\sum_{k = 1}^p l(x_k, y_k, \theta)}_\text{unprivileged} + \lambda \underbrace{\sum_{j = 1}^m l(x_j, y_j, \theta)}_\text{privileged}
+\end{equation}
+
+Sponge Poisoning aim to drain battery and cause delays in resource-constrained systems. The attacker manipulates the training dataset to create a model with reduced activation sparsity. This forces hardware accelerators to perform more computations during inference for any input, increasing energy use and latency without affecting accuracy.
 
 \subsection{Targeted Poisoning}
 A targeted poisoning attack aims to manipulate a machine learning model so that it misclassifies one or more specific inputs at test time in a way chosen by the attacker, while leaving the model's overall performance on other data largely unaffected. The attacker's core strategy is to inject carefully poison samples into the model's training data. The mathematical goal is a bi-level optimization problem:
@@ -43,16 +49,16 @@ A targeted poisoning attack aims to manipulate a machine learning model so that 
               \arg\min_x \underbrace{\|f(x) - f(t)\|^2_2}_{\substack{\text{small distance between} \\ \text{\(x\) and \(t\) in feature space}}} + \underbrace{\beta\|x - b\|^2_2}_{\substack{\text{small distance between} \\ \text{\(x\) and \(b\) in input space}}}
           \end{equation}
 
-    \item \textit{Convex Polytope Attack}: A single point can be insufficient, especially for end-to-end training. To increase robustness, Zhu et al. introduced the Convex Polytope attack. Instead of one poison, they generate multiple poison samples from the base class. These poisons are positioned to form a convex polytope in feature space that encloses the target sample. This multipoint enclosure makes it much harder for the target to be correctly classified, significantly improving attack success rates and transferability to unknown model architectures.
-    \item \textit{The Bullseye Polytope Advancement}: Building on this, Aghkhani et al. developed the Bullseye Polytope attack, which optimizes for a more specific geometric configuration. It arranges multiple poisons so that their mean is as close as possible to the target in feature space, rather than just forming a general polytope. This tight clustering around the target is more efficient and scalable, leading to higher attack success rates with fewer computational resources.
+    \item \textit{Convex Polytope Attack}: A single point can be insufficient, especially for end-to-end training. To increase robustness, Zhu et al.\ introduced the Convex Polytope attack. Instead of one poison, they generate multiple poison samples from the base class. These poisons are positioned to form a convex polytope in feature space that encloses the target sample. This multipoint enclosure makes it much harder for the target to be correctly classified, significantly improving attack success rates and transferability to unknown model architectures.
+    \item \textit{The Bullseye Polytope Advancement}: Building on this, Aghkhani et al.\ developed the Bullseye Polytope attack, which optimizes for a more specific geometric configuration. It arranges multiple poisons so that their mean is as close as possible to the target in feature space, rather than just forming a general polytope. This tight clustering around the target is more efficient and scalable, leading to higher attack success rates with fewer computational resources.
 \end{itemize}
 
 \subsubsection{Backdoor Poisoning Attacks}
-A backdoor poisoning attack is a type of security threat in amchine learning where an adversary manipulates a model during its training phase. The goal is to implant a secret backdoor, which is a specific pattern or trigger. The compromised model behaves normally on regular, clean inputs but performs an adversary-selected, often malious, behavior wen it detects the triger at test time.
+A backdoor poisoning attack is a type of security threat in machine learning where an adversary manipulates a model during its training phase. The goal is to implant a secret backdoor, which is a specific pattern or trigger. The compromised model behaves normally on regular, clean inputs but performs an adversary-selected, often malicious, behavior when it detects the trigger at test time.
 
 \begin{itemize}
     \item \textit{BadNets}: BadNets is the foundational attack in this domain. In the typical scenario, a user outsources model training to a malicious third party. This attacker injects a small, fixed pattern into a subset of training images and changes their labels to a target class. The model learns to associate this obvious trigger with the wrong label, creating a backdoor.
-    \item \textit{Hidden Triggers}: A key limitation of BadNets is that the trigger is visible in the poisoned training data, making detection possible. To overcome this, Saha et al. introduced Hidden Trigger Backdoor Attacks. Their method uses clean, correclty labeled images during poisoning. It adds a small, optimized perturbation to these images, creating a feature collision in the model's internal representation. This collision causes the perturbed clean image to be classified as the target class, while the attacker uses a different, secret trigger to activate the backdoor during deployment.
+    \item \textit{Hidden Triggers}: A key limitation of BadNets is that the trigger is visible in the poisoned training data, making detection possible. To overcome this, Saha et al.\ introduced Hidden Trigger Backdoor Attacks. Their method uses clean, correctly labeled images during poisoning. It adds a small, optimized perturbation to these images, creating a feature collision in the model's internal representation. This collision causes the perturbed clean image to be classified as the target class, while the attacker uses a different, secret trigger to activate the backdoor during deployment.
     \item \textit{Input-Aware Attacks}: The next leap in stealth came from Nguyen and Tran, who proposed the Input-Aware Dynamic Backdoor Attack. This method breaks the fundamental defense assumption of a universal trigger. Instead of a fixed pattern, it uses a secondary neural network to generate a unique, dynamic trigger for every input sample. This makes the trigger blend seamlessly with each input, rendering traditional detection methods that look for consistent patterns ineffective.
 \end{itemize}
 
@@ -60,11 +66,11 @@ A backdoor poisoning attack is a type of security threat in amchine learning whe
 Defenses against data poisoning attacks can be categorized based on their operational phase: training-time defenses and test-time defenses. Training-time defenses aim to prevent poison from entering the model or to mitigate its effects during learning, while test-time defenses operate on the assumption that a model may already be compromised.
 
 \begin{enumerate}
-    \item \textit{Training Data Sanitization}: This approach is based on the premise that poisoned data points often behave as satistical outliers. Core methods include:
+    \item \textit{Training Data Sanitization}: This approach is based on the premise that poisoned data points often behave as statistical outliers. Core methods include:
 
           \begin{itemize}
               \item \textit{Reject on Negative Impact}: A data point is rejected if adding it to the training set degrades model performance on a held-out validation set. This method is highly effective but can be computationally expensive, as it requires retraining or significant model updates for evaluation.
-              \item \textit{Label Sanitization}: Particularly useful against label-flipping attacks, this technique audits data labels for consistency. A common method involves checking a data poin's \(k\) nearerst neighbors and performing a majority vote to correct potentially flipped labels. Its primary limitation is that it is generally ineffective against clean-label attacks, where the poison lies in the data features, not the labels.
+              \item \textit{Label Sanitization}: Particularly useful against label-flipping attacks, this technique audits data labels for consistency. A common method involves checking a data point's \(k\) nearest neighbors and performing a majority vote to correct potentially flipped labels. Its primary limitation is that it is generally ineffective against clean-label attacks, where the poison lies in the data features, not the labels.
           \end{itemize}
 
     \item \textit{Robust Training}: These algorithms are designed to be inherently resilient to a fraction of corrupted data, making them applicable to various attack types. An example is the TRIM algorithm, used for Ridge Regression and adaptable to other models. It solves an optimization problem that jointly learns model parameters and selects a subset of training data:
@@ -76,8 +82,8 @@ Defenses against data poisoning attacks can be categorized based on their operat
     The algorithm starts with an oversized dataset where \(N = (1 + \alpha)n\) (\(\alpha\) is the assumed poison fraction) and iteratively selects the \(n\) points with the lowest loss for training. A key vulnerability is that an adaptive attacker, aware of this defense, can optimize poison data to appear less anomalous. Theoretical and empirical research indicates that standard training procedures like Stochastic Gradient Descend (SGD) can exhibit inherent robustness under certain conditions, such as specific data separability assumptions and constrained model capacity. Furthermore, novel defenses propose identifying and excluding training samples isolated in gradient space, as effective poisons often create gradients distinct from clean data.
     \item \textit{Model Inspection \& Sanitization}: These defenses are applied after a model is trained, either to diagnose a backdoor or to neutralize its effect during deployment.
     \begin{itemize}
-        \item \textit{Activation Clustering}: A seminal method for detectin backdoors. It focuses on a suspected target class, extracts deep-layer activation vectors for all training sampels in that class, and performs dimensionality reduction followed by K-means clustering (with \(k = 2\)). The separation into two distinct clusters often reveals the poisoned subset. A key advantage is that it operates without requiring a trusted, clean dataset.
-        \item \textit{Fine-Pruning}: This method exploits the observation that backdoors often rely on a small set of dormant neurons that are highly active only for triggered inputs. The process inveolves pruning neurons with the lowest average actiavtion on clean data and then fine-tuning the model to recover accuracy. An adaptive attacker can potentially circumvent this by designing triggers that also activate neurons used for clean tasks.
+        \item \textit{Activation Clustering}: A seminal method for detection backdoors. It focuses on a suspected target class, extracts deep-layer activation vectors for all training samples in that class, and performs dimensionality reduction followed by K-means clustering (with \(k = 2\)). The separation into two distinct clusters often reveals the poisoned subset. A key advantage is that it operates without requiring a trusted, clean dataset.
+        \item \textit{Fine-Pruning}: This method exploits the observation that backdoors often rely on a small set of dormant neurons that are highly active only for triggered inputs. The process involves pruning neurons with the lowest average activation on clean data and then fine-tuning the model to recover accuracy. An adaptive attacker can potentially circumvent this by designing triggers that also activate neurons used for clean tasks.
     \end{itemize}
     \item \textit{Trigger Reconstruction}: This approach formalizes trigger reverse-engineering as an optimization problem. It searches for a trigger pattern \(\Delta\) and a mask \(M\) that, when applied to inputs, cause them to be classified as the target label. The objective is:
     
@@ -85,6 +91,6 @@ Defenses against data poisoning attacks can be categorized based on their operat
         \arg\min_{\Delta, M} \mathcal{L}(f(x_t), y_t), \qquad x_t = x \odot (1 - M) + \Delta \odot M
     \end{equation}
 
-    TABOR inorporates regularization terms to constrain the trigger to be smooth and small, preventing the detection of false, meaningless patterns.
-    \item \textit{Test Data Sanitization}: This use-side defense assumes the model is arleady poisoned and aims to neutralize the trigger before inference. FEBRUUS is a method designed for image data. It first generates a heatmap to identify the image regions most influenced on the model's prediction. In a poisoned image, this region typically corresponds to the trigger. It then removes the identified region and uses inpainting techniqeus to reconstruct a clean version of the image for classification.
+    TABOR incorporates regularization terms to constrain the trigger to be smooth and small, preventing the detection of false, meaningless patterns.
+    \item \textit{Test Data Sanitization}: This use-side defense assumes the model is already poisoned and aims to neutralize the trigger before inference. FEBRUUS is a method designed for image data. It first generates a heatmap to identify the image regions most influenced on the model's prediction. In a poisoned image, this region typically corresponds to the trigger. It then removes the identified region and uses inpainting techniques to reconstruct a clean version of the image for classification.
 \end{enumerate}
