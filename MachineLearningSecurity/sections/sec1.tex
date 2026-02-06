@@ -1,0 +1,294 @@
+\section{Evasion Attacks}
+
+\subsection{Introduction}
+Evasion Attacks are a type of attack specifically targeting a deployed machine learning model. The attacker's goal is to manipulate input data at test time to cause a deliberate misclassification. The manipulated input, which is called an adversarial example, must be very similar to a legitimate input: a human observer should perceive it as normal, but the model processes it incorrectly, compromising its accuracy and reliability. These attacks are broadly categorized based on the attacker's knowledge of the target system.
+
+\paragraph{White-box Attacks.} In white-box attacks, the attacker has full knowledge of the model, including its architecture parameters, training data, and the ability to compute gradients. The fundamental strategy is to find a small perturbation to a legitimate input that pushes it across the model's decision boundary. For a given legitimate sample \(x\) (with true label \(y\)), we want to find an adversarial example \(x'\) such that:
+
+\begin{enumerate}
+    \item \textit{Misclassification}: The model's output for \(x'\) is different from \(y\) (e.g., classified as a target class \(y_t\)).
+    \item \textit{Similarity Constraint}: The perturbation \(\delta = x' - x\) is minimized. This is typically measured by an \(l_p\)-norm and kept below a maximum threshold \(d_\text{max}\).
+\end{enumerate}
+
+A first thought is to use Gradient Descent (GD) to minimize the model's discriminant function \(g(x)\) for the target class. However, vanilla GD has a critical flaw for this task: it finds the steepest local descent. The loss landscape of complex models can have many flat regions or local minima where GD gets stuck. This means the attack might fail to find a successful adversarial example even if one exists nearby. Moreover, simply minimizing \(g(x)\) doesn't actively guide the adversarial sample to look like or be dense within the target class distribution. It might find an unnatural, easily detectable sample. Two solutions are proposed:
+
+\begin{itemize}
+    \item \textit{Gradient Descent with Kernel Density Estimation (KDE)}: This method solves the lack of guidance problem by ensuring the adversarial example \(x'\) not only crosses the boundary but also lands in a probable region of the target class. Modify the objective function to have two competing terms:
+
+          \begin{equation}
+              \min_{x'} g(x') - \lambda \cdot p(x' | y_t) \qquad \text{subject to} \quad \|x - x'\|_p \leq d_\text{max}
+          \end{equation}
+
+          \begin{itemize}
+              \item Evasion: \(g(x')\) -- Minimizing this encourages misclassification away from the original class.
+              \item Attraction: \(-\lambda p(x' | y_t)\) -- Maximizing the estimated probability of \(x'\) belonging to the target class \(y_t\) attracts it toward the center of the target class distribution. KDE is a common, model-agnostic technique to estimate this probability \(p\). For the common RBF (Gaussian) kernel, the gradient of the KDE term has a closed form:
+
+                    \begin{equation}
+                        \nabla p(x | y_t) = -\sum_i \exp\left(-\frac{\|x - x_i\|^2}{h}\right) \cdot (x - x_i)
+                    \end{equation}
+
+                    where \(x_i\) are target class samples and \(h\) is the bandwidth. This formula shows that the attraction force is a weighted sum of vectors pointing toward each target class sample, with closer samples exerting stronger pull.
+
+              \item Trade-off Parameter \(\lambda\) -- This parameter controls the balance. A high \(\lambda\) prioritizes making \(x'\) look very typical of class \(y_t\), while a low \(\lambda\) prioritizes finding any misclassification with the smallest possible perturbation, even if \(x'\) looks like an outlier.
+          \end{itemize}
+
+    \item \textit{Adversarial Initialization}: This method addresses the problem of local minima by choosing a smarter starting point for the optimization. Instead of starting from the original sample \(x\) and trying to minimize its score for the true class, start from a benign sample that already belongs to the target class \(y_t\). Perform gradient descent to maximize the model's discriminant function for the original class \(y\). Stop as soon as the sample crosses the decision boundary back into the original class \(y\) or any other incorrect class.
+\end{itemize}
+
+\paragraph{Black-box Attacks.} In a Black-Box setting, the attacker cannot directly compute gradients from the target model. The primary strategy relies on a powerful, empirically-observed phenomenon called Transferability. Adversarial examples crafted to fool one model are often effective at fooling a different, unknown model performing the same task, even if the models have different architectures or were trained on different datasets. The paper "Why Do Adversarial Attacks Transfer?" clarifies that transferability is not random but depends on two key factors:
+
+\begin{enumerate}
+    \item \textit{Vulnerability of the Target Model}: The target model must have its own intrinsic blind spots or vulnerabilities in its decision boundaries. A robust model is inherently harder to attack, even via transfer.
+    \item \textit{Alignment of Evasion Gradients}: Transferability is highest when the direction of the gradient used to attack the surrogate model is similar to the gradient direction that would be required to attack the target model. If both models have learned similar representations, their gradients will align, making attacks highly transferable.
+\end{enumerate}
+
+\subsubsection{Evasion of Multi-class Classifiers}
+In multi-class classification problems, an attacker can have different precision in their goals. This leads to two distinct categories of attacks, defined by the type of error they aim to cause.
+
+\begin{itemize}
+    \item \textit{Error-Generic (Indiscriminate) Evasion}: The attacker's goal is to cause any misclassification. The sample's true label \(k\) should become anything other than \(k\). This is a broader, often easier goal, as the attacker only needs to push the sample across any decision boundary. Mathematically, the goal is to make the score of the true class \(k\) lower than the score of some other class. So, identify the most likely competing class \(l\), which is the class with the highest score other than the true class. This is the "closest" rival in the feature space. We define the margin for the true class as:
+
+          \begin{equation} \label{eq:margin}
+              \Omega(x) = f_k(x) - \max_{l \neq k} f_l(x)
+          \end{equation}
+
+          To cause a misclassification, we minimize this margin until it becomes negative, while keeping the perturbation small.
+
+          \begin{equation}
+              \min_{x'} \left[f_k(x') - \max_{l \neq k} f_l(x')\right] \qquad \text{subject to} \quad d(x, x') \leq d_\text{max}
+          \end{equation}
+
+    \item \textit{Error-Specific (Targeted) Evasion}: The attacker's goal is to cause a specific misclassification into a chosen target class \(t\). This is a more constrained and typically harder goal, as the sample must be pushed across the boundary into a particular region of the feature space. Mathematically, the goal is to make the score of the target class \(t\) become the highest score. For the target class to win, its score must exceed the score of all other classes, especially the current highest scorer \(l\). We define the margin in \Cref[eqref]{eq:margin}. To cause the specific misclassification, we maximize this margin for the target class, making \(f_t(x')\) as large as possible relative to all others.
+
+          \begin{equation}
+              \max_{x'} \left[f_t(x') - \max_{l \neq t} f_l(x')\right] \qquad \text{subject to} \quad d(x, x') \leq d_\text{max}
+          \end{equation}
+\end{itemize}
+
+\begin{table}[!b]
+    \centering
+    \footnotesize
+    \begin{tabular}{
+        >{\raggedright\arraybackslash}p{0.09\textwidth}
+        >{\raggedright\arraybackslash}p{0.24\textwidth}
+        >{\raggedright\arraybackslash}p{0.28\textwidth}
+        >{\raggedright\arraybackslash}p{0.28\textwidth}
+        }
+        \toprule
+        \textbf{Norm(\(p\))} & \textbf{Constraint \(\|\delta\|_p \leq d_\text{max}\)}           & \textbf{Attack Style}                                                                                                                                                                                 & \textbf{Effect}                                                                                                                                                \\
+        \midrule
+        \(l_0\)              & Number of non-zero elements in \(\delta \leq \delta_\text{max}\) & \textit{Sparse Attack}. The attacker is limited in the number of features they can modify, but can change those few features by arbitrarily large amounts.                                            & Creates adversarial examples with a few altered spots (e.g., strategic noise patches).                                                                         \\
+        \(l_1\)              & Sum of absolute changes \(\leq d_\text{max}\)                    & \textit{Moderately Sparse Attack}. Encourages some features to be changes a lot and many to be zero. The optimum for regularized problems often lies at the vertices of the diamond-shaped unit ball. & Creates perturbations where changes are concentrated in a subset of important features, but with less extreme spikes than \(l_0\)                              \\
+        \(l_2\)              & Square root of sum of squared changes \(\leq d_\text{max}\)      & \textit{Dense, Small-Magnitude Attack}. The attacker distributes many small changes across most or all features. The circular unit ball penalizes large individual changes heavily.                   & Creates widespread, low-amplitude noise across the entire input. Often perceptible as slight blurring or distortion.                                           \\
+        \(l_\infty\)         & Maximum absolute change in any feature \(\leq d_\text{max}\)     & \textit{Uniform, Bounded Attack}. The attacker is limited by the maximum change per feature. This allows them to change every feature, but only by a small, fixed amount \(\varepsilon\).             & Creates perturbations where every pixel is altered by at most \(\pm \varepsilon\). This can create subtle, coordinated patterns often imperceptible to humans. \\
+        \bottomrule
+    \end{tabular}
+    \caption{A comparison of common adversarial perturbation norms, detailing their mathematical constraints, characteristic attack styles, and typical visual or practical effects on the input data.}%
+    \label{tab:norm}
+\end{table}
+
+To solve these optimization problems efficiently, attackers use gradient-based methods. This requires computing the gradient of the objective function \(\Omega(x)\) with respect to the input \(x\), which is only possible if the classifier's discriminant functions are differentiable. The core mechanism is the chain rule. For a neural network, we take the output of the final layer, say \(f_i(x)\). Using back-propagation, we can compute how a change in the input would affect the output. This is automated in deep learning frameworks via Automatic Differentiation. By setting \(x\) as a variable requiring gradients, a single backward pass from the loss \(\Omega(x)\) computes its gradient \(\nabla_x \Omega(x)\). If we consider the network's final pre-activation logits as \(z\), the gradient is:
+
+\begin{equation}
+    \nabla_x f_i(x) = \frac{\partial f_i}{\partial z} \frac{\partial z}{\partial x}
+\end{equation}
+
+The first term is the gradient at the output layer, and the second term is the Jacobian of the network's transformations with respect to the input, computed layer-by-layer via back-propagation.
+
+\subsubsection{The Effect of Different Norms}
+The choice of the norm used to measure perturbation size is not arbitrary. It fundamentally shapes the attacker's strategy and the resulting adversarial example's characteristics. Different norms penalize deviations in distinct geometrical ways. An \(l_p\)-norm for a perturbation vector \(\delta = x' - x\) is defined as:
+
+\begin{equation}
+    \|\delta\|_p = \left(\sum_{i = 1}^n |\delta_i|^p\right)^\frac{1}{p}
+\end{equation}
+
+The parameter \(p\) changes the shape of the unit ball, which in turn constrains how the attacker can distribute their perturbation budget \(d_\text{max}\) across the input's features. In \Cref{tab:norm} we can see a comparison of common adversarial perturbation norms, highlighting their constraints, typical attack styles, and resulting effects on the input.
+
+\begin{figure}[!b]
+    \centering
+    \begin{tikzpicture}[scale=0.85, transform shape]
+        \draw [thick, -Stealth] (-0.5, 0) -- (6, 0) node [midway, below] {\(\|\delta\|_p\)};
+        \draw [thick, -Stealth] (0, -0.5) -- (0, 6) node [rotate=90, midway, above] {\(L(x + \delta, y; \theta)\)};
+
+        \draw [very thick, domain=0.3:5.5, smooth, variable=\x, blue!70!black] plot ({\x}, {0.1 + 1/(\x - 0.1)});
+
+        \draw [dashed, gray] (1.5, 0) -- (1.5, 5.5) node [black, at start, below] {\(\varepsilon\)};
+    \end{tikzpicture}
+    \hspace{1cm}
+    \begin{tikzpicture}[scale=0.85, transform shape]
+        \draw [thick, -Stealth] (-0.5, 0) -- (6, 0) node [midway, below] {\(\|\delta\|_p\)};
+        \draw [thick, -Stealth] (0, -0.5) -- (0, 6) node [rotate=90, midway, above] {\(L(x + \delta, y; \theta)\)};
+
+        \draw [very thick, domain=0.3:5.5, smooth, variable=\x, blue!70!black] plot ({\x}, {0.1 + 1/(\x - 0.1)});
+
+        \draw [dashed, gray] (0, 0.5) -- (5.5, 0.5) node [black, at start, left] {\(t\)};
+    \end{tikzpicture}
+    \caption{Illustration of two Pareto frontiers in adversarial robustness. On the left, the maximum-confidence attack: for a fixed perturbation budget \(\varepsilon\) (vertical dashed line), the attacker maximizes loss (or confidence). On the right, the minimum-norm attack: for a target loss level \(t\) (horizontal dashed line), the attacker finds the smallest perturbation norm that achieves it.}%
+    \label{fig:pareto}
+\end{figure}
+
+\subsection{Attack Algorithms}
+All evasion attacks can be understood as solving an optimization problem that balances two conflicting objectives: maximizing the attack's success and minimizing the perturbation's detectability. This trade-off is formally visualized by the Pareto Frontier. The generic goal for an attacker is to find a perturbation \(\delta\) such that the loss function for the adversarial example is minimized for a targeted attack or maximized for an indiscriminate attack; the perturbation's magnitude, measured by a chosen \(l_p\)-norm is kept as small as possible. Formally, this is a bi-objective optimization problem:
+
+\begin{equation}
+    \min_\delta \left[(x + \delta, y; \theta), \|\delta\|_p\right]
+\end{equation}
+
+The set of optimal solutions to this bi-objective problem is called the Pareto Frontier. A solution is Pareto-optimal if you cannot improve one objective without worsening the other. To find a specific point on the Pareto frontier, we convert the multi-objective problem into a single-objective one by treating one goal as a hard constraint.
+
+\begin{enumerate}
+    \item \textit{Hard-constraint: Maximum-confidence Attacks}. For a fixed, maximum allowed perturbation budget \(\varepsilon\), cause the most confident misclassification possible. The vertical dashed line in \Cref{fig:pareto} at \(\|\delta\|_p = \varepsilon\) intersects the Pareto frontier. The optimal attack is the point on the frontier directly above this intersection, which has the lowest possible loss for that norm budget.
+
+          \begin{equation}
+              \min L(x + \delta, y; \theta), \qquad \text{subject to} \quad \|\delta\|_p \leq \varepsilon
+          \end{equation}
+
+    \item \textit{Hard-constraint: Minimum-norm Attacks}. Find the smallest perturbation that causes the model's loss to cross a specific threshold \(t\), ensuring misclassification. The horizontal dashed line in \Cref{fig:pareto} at \(L = t\) intersects the Pareto frontier. The optimal attack is the point on the frontier directly to the left of this intersection, which has the smallest possible norm that achieves the target loss.
+
+          \begin{equation}
+              \min \|\delta\|_p \qquad \text{subject to} \quad L(x + \delta, y; \theta) < t
+          \end{equation}
+
+          This formulation is often harder to solve directly because the loss constraint is nonlinear and non-convex. The practical approach is to use a soft-constraint method, converting it into an unconstrained problem:
+
+          \begin{equation}
+              \min_\delta \|\delta\|_p + c \cdot L(x + \delta, y; \theta)
+          \end{equation}
+
+          Here, a penalty coefficient \(c > 0\) controls the trade-off. By sweeping over different values of \(c\), we can trace out the Pareto frontier. Carlini \& Wagner attacks are famous examples of this approach, often using a carefully designed loss function to ensure misclassification.
+\end{enumerate}
+
+\subsubsection{Maximum-confidence Attacks}
+These attacks aim to solve the first hard-constraint formulation. They maximize the confidence of a misclassification while strictly adhering to a predefined perturbation budget \(\varepsilon\).
+
+\paragraph{Fast Gradient Sign Method.} A single-step white-box attack introduced by Goodfellow et al. It efficiently creates an adversarial example by perturbing the input in the direction of the sign of the loss gradient, scaled by a small \(\varepsilon\):
+
+\begin{equation}
+    x_\text{adv} = x + \varepsilon \cdot \text{sign}(\nabla L(x, y; \theta))
+\end{equation}
+
+It is based on a linear approximation of the model's loss function via first-order Taylor expansion. While classically defined for the \(l_\infty\) norm, the core principle extends to other norms. The key difference lies in the projection step after the gradient update. For \(l_2\), you project onto an \(\varepsilon\)-ball; for \(l_1\), onto a diamond-shaped constraint set.
+
+\paragraph{Projected Gradient Descent.} Developed by Mandry et al. PGD is the iterative, multistep generalization of FGSM\@. It applies FGSM multiple times with a small step size \(\alpha\), and after each step, it checks if the perturbed sample is outside the unit-ball; if it is, it projects the perturbed sample back onto the \(\varepsilon\)-ball of the chosen \(l_p\) norm.
+
+\begin{equation}
+    x_{t + 1} = \text{Proj}_\varepsilon (x_t + \alpha \cdot \text{sign} (\nabla L(x, y; \theta)))
+\end{equation}
+
+It often starts from a random point within the \(\varepsilon\)-ball around the original sample to better explore the loss landscape. This is much more powerful and effective than FGSM at finding adversarial examples within the constraint, making it a standard benchmark for evaluating model robustness. However, it is computationally expensive due to multiple iterations, and performance can still be sensitive to hyperparameters like step size and number of iterations.
+
+\paragraph{AutoPGD.} Introduced by Croce \& Hein to create a more reliable and parameter-free evaluation tool. APGD is an adaptive variant of PGD that automates critical choices. It features an adaptive step size that changes during optimization, eliminating the need to manually tune this parameter. There are two key variants:
+
+\begin{itemize}
+    \item \textit{AutoPGD-CE}: uses standard Cross-Entropy loss:
+
+          \begin{equation}
+              \text{CE}(x, y) = -\log p_y = -z_y + \log \left(\sum_{j = 1}^K e^{z_j}\right)
+          \end{equation}
+
+    \item \textit{AutoPGD-DLR}: uses a Difference of Logits Ratio loss, which is more robust against defenses that manipulate logit scales:
+
+          \begin{equation}
+              \text{DLR}(x, y) = - \frac{z_y - \max_{i \neq y} z_i}{z_{\pi_1} - z_{\pi_3}}
+          \end{equation}
+\end{itemize}
+
+\subsubsection{Minimum-norm Attacks}
+These attacks aim to solve the second hard-constraint formulation.
+
+\begin{itemize}
+    \item \textit{DeepFool \& FAB}: Proposed by Moosavi-Dezfooli et al., this is an iterative, linear approximation attack. It treats the classifier's decision boundary as linear near the input. In each step, it calculates the smallest orthogonal perturbation needed to push the sample to the nearest boundary.
+    
+    \begin{equation}
+        \underbrace{x^* = x - \frac{f(x)}{\|w\|} w}_\text{Binary}; \qquad \underbrace{d(x, B) = \frac{f_k(x) - f_y(x)}{\| \nabla f_k(x) - \nabla f_y(x) \|_q}}_\text{Multi-class}
+    \end{equation}
+
+    It repeats this process until misclassification occurs. However, this algorithm assumes local linearity, which may not always hold perfectly.
+
+    \textit{Fast Adaptive Boundary} (FAB), developed by Croce \& Hein, is an efficient white-box attack designed for multiple norms (\(l_1, l_2, l_\infty\)). It uses essentially the same approximation of DeepFool to estimate distance to boundary, however it improves the projection, also accounting for the presence of the box constraint, and uses momentum to accelerate convergence.
+    \item \textit{Jacobian Saliency-Map Attack}: Introduced by Papernot et al., this is a targeted, greedy attack that aims to modify as few input features as possible. It uses the Jacobian matrix of the model's outputs to create a "saliency map". This map identifies which feature, if perturbed, will most increase the target class score while decreasing others. However, it can be computationally expensive per iteration as it computes gradients for all output classes, and it may not find the global optimum.
+    \item \textit{Carlini-Wagner Attack}: A highly influential and powerful optimization-based attack. It reformulates the constrained minimum-norm problem into an unconstrained one using a custom loss function and a change-of-variables to handle box constraints. It is often solved with gradient descent. However, it can be very slow, often requiring thousands of iterations and careful hyperparameter tuning.
+    
+    \begin{equation}
+        \min_\delta \|\delta\|_2 + c \cdot \max(\mathcal{L}(x, y; \theta), -k) \qquad \text{subject to} \quad x + \delta \in [0, 1]^d
+    \end{equation}
+
+    \(c > 0\) is chosen via line search, while \(k \geq 0\) can be set to achieve misclassification with a non-zero confidence in the target class.
+
+    \item \textit{Brendel-Bethge Attack}: This is a decision-boundary-based attack that works fundamentally differently from gradient-descent methods. It starts from a known adversarial example and performs a binary search to find the decision boundary. It then walks along the boundary towards the original image, minimizing distance. While being highly reliable and effective at bypassing defenses that cause gradient masking, it requires a valid starting adversarial example, which can sometimes be a challenge to find.
+    \item \textit{Decoupled Direction and Norm Attack}: Proposed by Rony et al., this is an iterative \(l_2\)-norm attack that explicitly separates the update into direction and norm components. In each step, it moves in a direction to increase the loss and simultaneously projects the perturbation onto a sphere of a gradually shrinking radius. It is more efficient than C\&W, often requiring far fewer iterations to achieve comparable small perturbations. However, it is primarily designed for the \(l_2\) norm, so less directly applicable to \(l_\infty\) or sparse attacks.
+\end{itemize}
+
+\subsection{Countering Evasion Attacks}
+\subsubsection{Robust Optimization / Adversarial Training}
+The core principle of Adversarial Training is to train the model on a dataset augmented with adversarial examples, making the model inherently more resistant to attacks. The defense is formally defined as a min-max optimization problem:
+
+\begin{equation}
+    \min_w \max_{\|\delta_i\|_\infty \leq \varepsilon} \sum_i l(y_i, f_w(x_i + \delta_i))
+\end{equation}
+
+For each training sample \(x_i\), we find the worst-case adversarial perturbation \(\delta_i\) within an \(l_p\)-norm ball of radius \(\varepsilon\). This perturbation maximizes the loss, simulating the strongest possible attack during training. In practice, this is approximated by running an attack algorithm for a few steps. The model parameters \(w\) are updated to minimize the loss on these worst-case perturbed examples. This process hardens the model by teaching it to be correct even for inputs intentionally designed to fool it.
+
+\begin{figure}[!b]
+    \centering
+    \begin{tikzpicture}
+        \draw [thick, -Stealth] (-0.5, 0) -- (6, 0);
+        \draw [thick, -Stealth] (0, -0.5) -- (0, 4) node [rotate=90, midway, above] {\(g(x)\)};
+
+        \draw [very thick, blue!70!black] (0.5, 0.5) .. controls (1.5, 4.5) and (3, -0.8) .. (4, -1.5);
+        \draw [very thick, dashed, red!70!black] (0.5, 0.5) .. controls (1.5, 4.5) and (4, -0.8) .. (5.5, -0.8);
+
+        \draw [dashed] (1.75, 1.85) -- (1.75, 0) node [below] {\(x\)};
+        \draw [dashed] (3.5, -0.85) -- (3.5, 0) node [above] {\(x'\)};
+    \end{tikzpicture}
+    \caption{A conceptual visualization of adversarial training's effect on the decision boundary. The solid blue line represents the original, non-robust classifier's boundary \(g(x) = 0\). The point \(x\) is correctly classified. The dashed red line shows the boundary of an adversarially trained classifier. The adversarial perturbation \(\delta\) successfully pushes \(x\) to \(x'\) across the original boundary, causing a misclassification. The adversarially trained boundary has been "pushed away" from the data point, creating a margin of width \(\varepsilon\). This makes the same perturbation \(\delta\) insufficient to cross the new boundary.}%
+    \label{fig:at}
+\end{figure}
+
+For convex, non-linear models like neural networks, adversarial training acts like a powerful regularizer that smooths out the model's decision boundaries. By forcing the model to be robust to small, malicious perturbations, it encourages the loss landscape to be flatter and more stable around training points (\Cref{fig:at}). This directly reduces the magnitude of the input gradient \(\|\nabla_x l\|\), making the model less sensitive to small changes. Research by Demontis, Biggio, et al. shows that \(l_\infty\)-norm regularization is theoretically the optimal regularizer for defending against sparse evasion attacks. This is because penalizing the \(l_\infty\)-norm of a gradient minimizes its maximum component, making it harder for a sparse attack to find a single, highly sensitive feature to exploit.
+
+\subsubsection{Detecting \& Rejecting Adversarial Examples}
+Unlike robust optimization, which modifies the classifier to be intrinsically robust, this approach focuses on identifying and filtering out adversarial inputs before they reach the main classifier. It relies on the hypothesis that adversarial examples, while similar to natural inputs, posses anomalous statistical properties that can be detected. The foundational assumption is that adversarial examples occupy regions of the input space where the training data density is very low. A detector's task is to define a rejection region around the natural data manifold; any input falling outside this region is flagged as adversarial and rejected.
+
+A critical vulnerability of pure detection-based defenses is that they are themselves susceptible to attack. If an attacker knows a detector is in place, they can adapt their objective to create adversarial examples that both evade the detector and fool the classifier. The most promising application of detection is as a component in a layered defense-in-depth strategy, combined with elements outside the attacker's control.
+
+\paragraph{Robust Learning with Domain Knowledge.} This is a prime example of an "opaque" safeguard. By embedding hard constraints derived from prior knowledge directly into the learning process, the model's hypothesis space is restricted to only plausible functions. An adversarial input violating these constraints can be rejected because it corresponds to an impossible state in the real world. The attacker cannot circumvent this defense without also breaking the fundamental domain constraints, which are external to the ML model itself.
+
+\begin{equation}
+    \min_f = \frac{1}{n} \sum_{i = 1}^{l} L_y(f(x_i), y_i) + \sum_{j = 1}^{l + u} \sum_{h = 1}^{m} \lambda_m \cdot L_\phi (\phi_h (f(x_j))) + \lambda \|f\|
+\end{equation}
+
+This is the objective function for Robust Learning with Domain Knowledge. It trains a model \(f\) by optimizing three goals at once:
+
+\begin{enumerate}
+    \item The first part minimizes prediction error on labeled data.
+    \item The second part is the core defense. It penalizes the model when its prediction violate known rules about the world (the "domain knowledge" constraints \(\phi_h\)).
+    \item The last part is standard regularization to prevent overfitting.
+\end{enumerate}
+
+It forces the model to learn only realistic patterns. An adversarial example that causes a misclassification will often have to break the hard-coded rules to do so.
+
+\subsection{Certified Defenses}
+Certified defense provide mathematical guarantees of robustness within defined perturbation bounds. Unlike empirical defenses, which rely on testing against known attacks, certified defenses ensure no adversarial example exists under given constraints, offering stronger security assurances.
+
+\begin{itemize}
+    \item \textit{Interval Bound Propagation (IBP)}: IBP certifies robustness by propagating simple interval bounds (rather than more complex shapes) for neuron activation across the network. For an input bounded by an \(l_\infty\) ball of radius \(\varepsilon\), it computes guaranteed worst-case bounds for the final logits. Crucially, recent analysis reveals IBP's effectiveness stems not from tight bounds but from acting as a strong regularizer during training, which promotes robust feature representations. A model is certifiably robust for an input if the lower bound of the true class logit exceeds the upper bounds of all others.
+    \item \textit{Randomized Smoothing}: This method constructs a "smoothed" classifier \(g(x)\) by taking the majority vote of a base classifier \(f\) on numerous Gaussian-noise perturbations of input \(x\). This process provides a probabilistic certificate: a radius \(R\) within which the prediction is stable under \(l_2\) perturbations. The core idea is averaging over randomness to create stability.
+    \item \textit{PatchCleanser}: Designed specifically for localized adversarial patches, PatchCleanser employs a model-agnostic, double-masking strategy. The first masking round generates many masked input versions, guaranteeing at least one mask completely removes the patch. The second round performs cross-masking consistency checks to identify and filter out predictions corrupted by the patch, revealing the true label. Its elegance lies in transforming the defense into a  detection and removal problem without requiring retraining of the base classifier, achieving high certified accuracy on complex datasets like ImageNet.
+\end{itemize}
+
+\subsubsection{Detecting Unreliable Evaluations}
+Empirical evaluations of adversarial defenses are often untrustworthy because they are vulnerable to gradient obfuscation and non-adaptive attacks. The core problem is that many published defenses do not create truly robust models. Instead, they implement gradient obfuscation, which breaks the gradient signal that standard iterative attacks (like PGD) rely on to craft adversarial examples. This gives a false sense of security: the attacker appears to fail, but the model can be easily circumvented by an adaptive attacker who knows the defense's mechanism. The Backward Pass Differentiable Approximation (BPDA) is a key adaptive attack method. When a defense uses a non-differentiable component, an attacker can approximate its gradient during the backward pass, often by substituting it with a differentiable surrogate.
+
+\begin{figure}[!b]
+    \centering
+    \includegraphics[width=\textwidth]{assets/ioaf.png}
+    \caption{Flowchart of the IoAF debugging protocol. When a standard attack fails, specific indicators (F1--F6) guide targeted mitigations (M1--M6) to rule out false security and reveal true model robustness.}%
+    \label{fig:ioaf}
+\end{figure}
+
+\begin{equation}
+    \nabla_x f(g(x))|_{x = \hat{x}} \approx \nabla_x f(x)|_{x = g(\hat{x})}
+\end{equation}
+
+\paragraph{Indicators of Attack Failures.} Pintor, Biggio et al. provide a framework to diagnose when an attack's failure is not due to model robustness. They categorize optimization failures in gradient-based attacks and propose six concrete indicators to detect them automatically. In \Cref{fig:ioaf} is illustrated the Indicators of Attack Failures (IoAF) framework. It breaks down the process of identifying why a standard gradient-based attack fails to find ad adversarial example for a defended model. Researchers can check a set of six specific indicators to understand the root cause of the failure. Once a cause is identified, the framework suggests targeted Mitigations. After applying a fix, the attack is re-run. This cycle continues until the attack either succeeds (proving the defense is not robust) or all failure indicators are resolved, and the attack genuinely fails, which provides stronger evidence for true model robustness.

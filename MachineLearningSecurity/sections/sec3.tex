@@ -1,0 +1,41 @@
+\section{Privacy Attacks}
+Privacy attacks against machine learning involve querying strategies that reveal confidential information on the learning model or its users.
+
+\subsection{Model Extraction/Stealing}
+Model Extraction/Stealing is an attack where an adversary, who only has black-box API access to a target ML model, aims to create a surrogate model that replicates the target's functionality. A model extraction attack has two main goals:
+
+\begin{enumerate}
+    \item \textit{Task Accuracy}: The attacker wants a model that performs the task as well as the original. This steals the intellectual property of the model owner.
+    \item \textit{High Fidelity}: The attacker wants a model that mimics the original's behavior exactly, including its mistakes and decision boundaries. This is because this surrogate can then be used to craft powerful white-box attacks that will transfer effectively to the black-box target model. The fidelity is more important than raw accuracy here.
+\end{enumerate}
+
+The basic version of the attack uses a two-step approach. At fist, send many inputs to the target model and collect the outputs. Then, use this collected data as a new training dataset to train your own surrogate model. You don't need the original training data. Querying with random images from a different distribution can still yield an accurate surrogate, though it requires many queries. Instead of random images, the attacker intelligently crafts query images to get the most informative data per query. This encourages inputs in which the victim is confident (images similar to the ones of the unknown training dataset), and diversity, ensuring the queries are varied to cover different parts of the input space.
+
+\paragraph{Defenses against Model Extraction.} Two main defense strategies exist:
+
+\begin{itemize}
+    \item \textit{Defense Strategy 1}: During the training of the original model, embed a hidden watermark or backdoor. This is a secret pattern, for example, a set of specific, subtly modified inputs that the model is trained to classify in a unique, predetermined way. If an attacker extracts a copy, the watermark behavior will be copied too. The original owner can then prove theft by showing that the suspect model responds to their secret watermark inputs in the same unique way.
+    \item \textit{Defense Strategy 2}: Don't stop the theft, detect it while it's happening. Monitor the query stream to the model API\@. Legitimate queries tend to have a natural distribution. Extraction queries are ad-hoc and optimized for data collection, creating an anomalous query pattern. Use statistical detection to flag anomalous query sequences and potentially block the IP address. 
+\end{itemize}
+
+\subsection{Membership Inference Attacks}
+The goal of Membership Inference attacks is to determine whether a specific data point was a part of the model's training dataset. This is a sophisticated, shadow-model based attack:
+
+\begin{enumerate}
+    \item \textit{Query the Target}: The attacker sends their suspect data point to the target model and gets the prediction.
+    \item \textit{Build Shadow Models}: This is the key step. The attacker doesn't know the original training data, so they simulate the training process. They collect their own dataset from a similar distribution. They train many shadow models that mimic the target model's architecture. For each of them, they know exactly which data was in its training set.
+    \item \textit{Create an Attack Classifier}: For each shadow model, they query it with data points that were in its training set and data points that were out. They record the prediction outputs. They then use this collected data to train a binary classifier. To attack the target model, they feed its prediction for the suspect data point into this trained attack classifier, which outputs "member" or "non-member".
+\end{enumerate}
+
+\paragraph{Defenses against MIA.} Three main strategies are used:
+
+\begin{itemize}
+    \item \textit{Regularization}: Use techniques like Dropout or L2 regularization during training to reduce overfitting. If the model generalizes better, the difference in its behavior on training vs. non-training data shrinks, making the attacker's signal weaker. However, this is often not strong enough to fully prevent a determined attack.
+    \item \textit{Differential Privacy}: This is a rigorous, mathematical framework. The goal is to make the model's output statistically indistinguishable whether any single individual's data was in the training set or not. The most common method is Differentially Private Stochastic Gradient Descent: during training, it clips the gradient contribution from each data point, and adds calibrated noise to the aggregated gradients. The \(\varepsilon\) parameter controls the privacy budget. Lower \(\varepsilon\) means stronger privacy, but more noise added, which leads to lower accuracy.
+    \item \textit{Prediction Vector Tampering}: Alter the model's API output to hide the signal attackers rely on. Instead of returning true confidence scores, add a little noise or round them. Don't give any confidence scores at all, just the final class. These techniques can make attacks harder, even though they can still work.
+\end{itemize}
+
+\subsection{Model Inversion Attacks}
+The goal of this attack is to reconstruct a representative training sample for a given class, using only black-box query access to the model. While Membership Inference asks "Was this specific data point in the training set?", Model Inversion asks "What does a general data point from the training set for this class look like?". This attack is particularly dangerous for models trained on sensitive data like faces, medical images, or financial records. 
+
+\paragraph{Defense Adversarial Examples.} The defenses that have been proposed against this attack consists of prediction vector tampering. When the model runs its prediction, it adds a small, carefully crafted noise vector to the scores before sending them to the user. The added noise is bounded (\(\varepsilon\)) so the scores aren't completely garbled. The noise should not change the final predicted class. The noisy scores must still form a valid probability distribution. The noise is designed to maximize the reconstruction error of a potential inversion attack. It subtly corrupts the gradient signal that an inversion attack relies on, making the reconstructed image blurry or meaningless, while keeping the model's core classification utility intact.
